@@ -9,6 +9,9 @@ export const PERMISSIONS = {
   environmentsWrite: { resource: "environments", action: "write" },
   apiKeysRead: { resource: "api_keys", action: "read" },
   apiKeysWrite: { resource: "api_keys", action: "write" },
+  experimentsRead: { resource: "experiments", action: "read" },
+  experimentsWrite: { resource: "experiments", action: "write" },
+  analyticsRead: { resource: "analytics", action: "read" },
 } as const;
 
 const DEFAULT_TENANT_PERMISSIONS = Object.values(PERMISSIONS);

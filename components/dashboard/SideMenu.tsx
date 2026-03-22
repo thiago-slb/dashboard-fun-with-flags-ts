@@ -125,6 +125,49 @@ export function SideMenu({ isOpen }: SideMenuProps) {
       );
     }
 
+    if (icon === "experiments") {
+      return (
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden
+        >
+          <path
+            d="M6 4V20M18 4V20M6 8H18M6 16H18"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+          <circle cx="10" cy="12" r="1.5" fill="currentColor" />
+          <circle cx="14" cy="12" r="1.5" fill="currentColor" />
+        </svg>
+      );
+    }
+
+    if (icon === "analytics") {
+      return (
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          aria-hidden
+        >
+          <path
+            d="M4 19V5M20 19H4M8 16V11M12 16V8M16 16V13"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      );
+    }
+
     return (
       <svg
         width="20"

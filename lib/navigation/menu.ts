@@ -15,14 +15,18 @@ export type MenuItemId =
   | "featureFlags"
   | "apiKeys"
   | "environments"
-  | "projects";
+  | "projects"
+  | "experiments"
+  | "analytics";
 
 export type MenuIconName =
   | "dashboard"
   | "feature_flags"
   | "api_keys"
   | "environments"
-  | "projects";
+  | "projects"
+  | "experiments"
+  | "analytics";
 
 export type ResolvedMenuItem = {
   id: MenuItemId;
@@ -76,6 +80,26 @@ const MENU_DEFINITIONS: Array<ResolvedMenuItem & { rule: MenuVisibilityRule }> =
     icon: "projects",
     rule: {
       resource: "projects",
+      action: "read",
+    },
+  },
+  {
+    id: "experiments",
+    href: "/experiments",
+    labelKey: "sideMenu.experiments",
+    icon: "experiments",
+    rule: {
+      resource: "experiments",
+      action: "read",
+    },
+  },
+  {
+    id: "analytics",
+    href: "/analytics",
+    labelKey: "sideMenu.analytics",
+    icon: "analytics",
+    rule: {
+      resource: "analytics",
       action: "read",
     },
   },

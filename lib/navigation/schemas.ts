@@ -1,10 +1,10 @@
 import { z } from "zod";
 
 export const navigationMenuItemSchema = z.object({
-  id: z.enum(["dashboard", "featureFlags", "apiKeys", "environments", "projects"]),
+  id: z.enum(["dashboard", "featureFlags", "apiKeys", "environments", "projects", "experiments", "analytics"]),
   href: z.string(),
   labelKey: z.string(),
-  icon: z.enum(["dashboard", "feature_flags", "api_keys", "environments", "projects"]),
+  icon: z.enum(["dashboard", "feature_flags", "api_keys", "environments", "projects", "experiments", "analytics"]),
 });
 
 export const navigationMenuResponseSchema = z.object({

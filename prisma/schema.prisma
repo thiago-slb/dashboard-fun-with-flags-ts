@@ -23,6 +23,31 @@ enum ActionLogType {
   DELETE
 }
 
+enum ExperimentStatus {
+  DRAFT
+  RUNNING
+  PAUSED
+  COMPLETED
+}
+
+enum ExperimentAllocationMode {
+  FIXED
+  BANDIT
+}
+
+enum ExperimentTargetType {
+  USER
+  FEATURE
+  PAGE
+}
+
+enum ExperimentDeviceType {
+  ANY
+  MOBILE
+  DESKTOP
+  TABLET
+}
+
 model User {
   id           String        @id @default(cuid())
   email        String        @unique
@@ -33,6 +58,8 @@ model User {
   updatedFlags FeatureFlag[] @relation("FeatureFlagUpdatedBy")
   apiKeys      ApiKey[]      @relation("ApiKeyCreatedBy")
   environments Environment[] @relation("EnvironmentCreatedBy")
+  createdExperiments Experiment[] @relation("ExperimentCreatedBy")
+  updatedExperiments Experiment[] @relation("ExperimentUpdatedBy")
   actionLogs   ActionLog[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -48,6 +75,9 @@ model Tenant {
   featureFlags FeatureFlag[]
   apiKeys      ApiKey[]
   environments Environment[]
+  experiments  Experiment[]
+  experimentEvents ExperimentEvent[]
+  experimentAssignments ExperimentAssignment[]
   actionLogs   ActionLog[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
@@ -144,6 +174,7 @@ model FeatureFlag {
   environment Environment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
   createdBy   User?       @relation("FeatureFlagCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   updatedBy   User?       @relation("FeatureFlagUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  experiments Experiment[]
 
   @@unique([tenantId, environmentId, key])
   @@index([tenantId, environmentId, enabled])
@@ -189,6 +220,7 @@ model Environment {
   createdByUserId String?
   featureFlags    FeatureFlag[]
   apiKeys         ApiKey[]
+  experiments     Experiment[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -198,6 +230,110 @@ model Environment {
   @@unique([tenantId, key])
   @@index([tenantId, enabled])
   @@index([tenantId, id])
+}
+
+model Experiment {
+  id                    String                    @id @default(cuid())
+  tenantId              String
+  environmentId         String
+  featureFlagId         String?
+  key                   String
+  name                  String
+  description           String?
+  status                ExperimentStatus          @default(DRAFT)
+  allocationMode        ExperimentAllocationMode  @default(FIXED)
+  targetType            ExperimentTargetType      @default(USER)
+  targetValue           String?
+  segmentCountry        String?
+  segmentDevice         ExperimentDeviceType      @default(ANY)
+  stickyBucketing       Boolean                   @default(true)
+  gradualRolloutEnabled Boolean                   @default(false)
+  rolloutPercent        Int                       @default(100)
+  autoStart             Boolean                   @default(false)
+  autoStop              Boolean                   @default(false)
+  startAt               DateTime?
+  endAt                 DateTime?
+  goalEventName         String                    @default("signup_completed")
+  guardrailMaxErrorRate Float?
+  guardrailMinRevenue   Float?
+  deletedAt             DateTime?
+  createdByUserId       String?
+  updatedByUserId       String?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+
+  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  environment Environment          @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  featureFlag FeatureFlag?         @relation(fields: [featureFlagId], references: [id], onDelete: SetNull)
+  createdBy   User?                @relation("ExperimentCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedBy   User?                @relation("ExperimentUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  variants    ExperimentVariant[]
+  assignments ExperimentAssignment[]
+  events      ExperimentEvent[]
+
+  @@unique([tenantId, environmentId, key])
+  @@index([tenantId, environmentId, status])
+  @@index([tenantId, deletedAt, id])
+}
+
+model ExperimentVariant {
+  id          String   @id @default(cuid())
+  experimentId String
+  key         String
+  name        String
+  trafficPercent Int
+  isControl   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  experiment  Experiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  assignments ExperimentAssignment[]
+  events      ExperimentEvent[]
+
+  @@unique([experimentId, key])
+  @@index([experimentId, trafficPercent])
+}
+
+model ExperimentAssignment {
+  id          String   @id @default(cuid())
+  tenantId    String
+  experimentId String
+  variantId   String
+  userKey     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  experiment  Experiment        @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  variant     ExperimentVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([experimentId, userKey])
+  @@index([tenantId, experimentId, variantId])
+}
+
+model ExperimentEvent {
+  id            String   @id @default(cuid())
+  tenantId      String
+  experimentId  String
+  variantId     String?
+  userKey       String?
+  eventName     String
+  pagePath      String?
+  featureKey    String?
+  country       String?
+  device        ExperimentDeviceType @default(ANY)
+  revenue       Float?
+  metadata      Json?
+  occurredAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  experiment  Experiment         @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  variant     ExperimentVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, experimentId, occurredAt])
+  @@index([tenantId, eventName, occurredAt])
+  @@index([tenantId, variantId, occurredAt])
 }
 
 model ActionLog {

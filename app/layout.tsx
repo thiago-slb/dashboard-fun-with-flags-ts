@@ -33,7 +33,6 @@ export default async function RootLayout({
   const session = await getSession();
   const isAuthRoute = AUTH_ROUTES.has(pathname);
 
-  console.log('session', session)
   if (!session) {
     const hasMaxLevelRoleUser = await existsUserWithMaxLevelRole();
 
