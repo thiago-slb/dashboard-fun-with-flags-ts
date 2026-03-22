@@ -131,6 +131,8 @@ model FeatureFlag {
   key             String
   name            String
   description     String?
+  allowListEmails Json?
+  deletedAt       DateTime?
   enabled         Boolean  @default(false)
   rolloutPercent  Int      @default(0)
   createdByUserId String?
@@ -162,6 +164,7 @@ model ApiKey {
   canWriteProjects     Boolean  @default(false)
   enabled              Boolean  @default(true)
   lastUsedAt           DateTime?
+  deletedAt            DateTime?
   createdByUserId      String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
@@ -171,6 +174,9 @@ model ApiKey {
   createdBy   User?       @relation("ApiKeyCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
 
   @@index([tenantId, environmentId, enabled])
+  @@index([tenantId, deletedAt, id])
+  @@index([tenantId, secretHash, deletedAt])
+  @@unique([secretHash])
 }
 
 model Environment {

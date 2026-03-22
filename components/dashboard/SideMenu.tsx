@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useI18n } from "@/components/i18n/I18nProvider";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Select } from "@/components/ui/Select";
 import { useNavigationMenuQuery } from "@/hooks/use-navigation-menu";
 import { useProjectsQuery, useSetActiveProjectMutation } from "@/hooks/use-projects";
 import type { NavigationMenuItem } from "@/lib/navigation/schemas";
@@ -196,8 +197,7 @@ export function SideMenu({ isOpen }: SideMenuProps) {
         {projectsQuery.isLoading ? (
           <Skeleton className="h-10 w-full rounded-lg" />
         ) : (
-          <select
-            className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#465fff]"
+          <Select
             value={(projectsQuery.data ?? []).find((item) => item.isActive)?.id ?? ""}
             onChange={async (event) => {
               const projectId = event.target.value;
@@ -208,14 +208,14 @@ export function SideMenu({ isOpen }: SideMenuProps) {
               window.location.reload();
             }}
             disabled={setActiveProjectMutation.isPending}
-          >
-            <option value="">{t("sideMenu.selectProject")}</option>
-            {(projectsQuery.data ?? []).map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: "", label: t("sideMenu.selectProject") },
+              ...((projectsQuery.data ?? []).map((project) => ({
+                value: project.id,
+                label: project.name,
+              }))),
+            ]}
+          />
         )}
         </div>
       ) : null}

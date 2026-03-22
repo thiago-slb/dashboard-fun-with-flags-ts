@@ -18,6 +18,23 @@ function jsonError(status: number, code: string, message: string) {
   return NextResponse.json(payload, { status });
 }
 
+function normalizeAllowListEmails(input: unknown) {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+  const unique = new Set<string>();
+  for (const entry of input) {
+    if (typeof entry !== "string") {
+      continue;
+    }
+    const normalized = entry.trim().toLowerCase();
+    if (normalized.length > 0) {
+      unique.add(normalized);
+    }
+  }
+  return Array.from(unique);
+}
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ flagId: string }> },
@@ -59,6 +76,7 @@ export async function PATCH(
     where: {
       id: flagId,
       tenantId: membership.tenantId,
+      deletedAt: null,
     },
     select: {
       id: true,
@@ -70,10 +88,17 @@ export async function PATCH(
   }
 
   try {
+    const updatePayload = {
+      ...parsedInput.data,
+      ...(parsedInput.data.allowListEmails !== undefined
+        ? { allowListEmails: normalizeAllowListEmails(parsedInput.data.allowListEmails) }
+        : {}),
+    };
+
     const updated = await prisma.featureFlag.update({
       where: { id: flagId },
       data: {
-        ...parsedInput.data,
+        ...updatePayload,
         updatedByUserId: membership.userId,
       },
       include: {
@@ -90,6 +115,7 @@ export async function PATCH(
       success: true,
       item: {
         ...updated,
+        allowListEmails: normalizeAllowListEmails(updated.allowListEmails),
         environmentKey: updated.environment.key,
         environmentName: updated.environment.name,
         createdAt: updated.createdAt.toISOString(),
@@ -129,6 +155,7 @@ export async function DELETE(
     where: {
       id: flagId,
       tenantId: membership.tenantId,
+      deletedAt: null,
     },
     select: {
       id: true,
@@ -139,8 +166,12 @@ export async function DELETE(
     return jsonError(404, "NOT_FOUND", "Feature flag not found.");
   }
 
-  await prisma.featureFlag.delete({
+  await prisma.featureFlag.update({
     where: { id: flagId },
+    data: {
+      deletedAt: new Date(),
+      enabled: false,
+    },
   });
 
   const payload = deleteFeatureFlagResponseSchema.parse({

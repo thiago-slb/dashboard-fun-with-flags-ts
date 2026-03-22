@@ -4,7 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ActionLogType, type PrismaClient } from "@prisma/client";
-import { MASTER_ROLE_NAME } from "@/lib/auth/constants";
 import { clearRateLimitBucketsForTests } from "@/lib/security/rate-limit";
 
 vi.mock("@/lib/auth/session", () => ({
@@ -31,7 +30,7 @@ let getSessionMock: ReturnType<typeof vi.fn>;
 let getActiveTenantIdCookieMock: ReturnType<typeof vi.fn>;
 
 beforeAll(async () => {
-  dbDir = mkdtempSync(path.join(os.tmpdir(), "fwf-environments-tests-"));
+  dbDir = mkdtempSync(path.join(os.tmpdir(), "fwf-api-keys-tests-"));
   const dbPath = path.join(dbDir, "test.db");
   dbUrl = `file:${dbPath.replace(/\\/g, "/")}`;
   process.env.DATABASE_URL = dbUrl;
@@ -70,6 +69,7 @@ beforeEach(async () => {
   await prisma.permission.deleteMany();
   await prisma.membership.deleteMany();
   await prisma.role.deleteMany();
+  await prisma.apiKey.deleteMany();
   await prisma.environment.deleteMany();
   await prisma.tenant.deleteMany();
   await prisma.user.deleteMany();
@@ -79,7 +79,7 @@ beforeEach(async () => {
   clearRateLimitBucketsForTests();
 });
 
-async function createUser(email = "u1@example.com") {
+async function createUser(email = "api-keys@example.com") {
   return prisma.user.create({
     data: {
       email,
@@ -95,27 +95,36 @@ async function createTenant(name: string, slug: string) {
   });
 }
 
+async function createEnvironment(tenantId: string, key: string, name: string) {
+  return prisma.environment.create({
+    data: {
+      tenantId,
+      key,
+      name,
+    },
+  });
+}
+
 async function createMembershipWithRole(params: {
   userId: string;
   tenantId: string;
   roleName: string;
-  withEnvironmentsRead?: boolean;
-  withEnvironmentsWrite?: boolean;
-  isMaster?: boolean;
+  withApiKeysRead?: boolean;
+  withApiKeysWrite?: boolean;
 }) {
   const role = await prisma.role.create({
     data: {
       tenantId: params.tenantId,
       name: params.roleName,
-      isSystem: Boolean(params.isMaster),
+      isSystem: false,
     },
   });
 
-  if (params.withEnvironmentsRead) {
+  if (params.withApiKeysRead) {
     const permission = await prisma.permission.create({
       data: {
         tenantId: params.tenantId,
-        resource: "environments",
+        resource: "api_keys",
         action: "read",
       },
     });
@@ -124,11 +133,11 @@ async function createMembershipWithRole(params: {
     });
   }
 
-  if (params.withEnvironmentsWrite) {
+  if (params.withApiKeysWrite) {
     const permission = await prisma.permission.create({
       data: {
         tenantId: params.tenantId,
-        resource: "environments",
+        resource: "api_keys",
         action: "write",
       },
     });
@@ -151,7 +160,7 @@ async function createMembershipWithRole(params: {
   return membership;
 }
 
-function setSession(userId: string, email = "u1@example.com") {
+function setSession(userId: string, email = "api-keys@example.com") {
   const payload: SessionMock = {
     userId,
     email,
@@ -161,10 +170,10 @@ function setSession(userId: string, email = "u1@example.com") {
   getSessionMock.mockResolvedValue(payload);
 }
 
-describe("environments api routes (integration)", () => {
-  it("GET /api/environments returns 401 without session", async () => {
-    const route = await import("@/app/api/environments/route");
-    const response = await route.GET(new Request("http://localhost/api/environments"));
+describe("api keys api routes (integration)", () => {
+  it("GET /api/api-keys returns 401 without session", async () => {
+    const route = await import("@/app/api/api-keys/route");
+    const response = await route.GET(new Request("http://localhost/api/api-keys"));
     const json = await response.json();
 
     expect(response.status).toBe(401);
@@ -173,7 +182,7 @@ describe("environments api routes (integration)", () => {
     expect(json.error.code).toBe("UNAUTHORIZED");
   });
 
-  it("GET /api/environments blocks users without environments:read permission", async () => {
+  it("GET /api/api-keys blocks users without api_keys:read permission", async () => {
     const user = await createUser();
     const tenant = await createTenant("Tenant", "tenant");
     await createMembershipWithRole({
@@ -183,8 +192,8 @@ describe("environments api routes (integration)", () => {
     });
     setSession(user.id, user.email);
 
-    const route = await import("@/app/api/environments/route");
-    const response = await route.GET(new Request("http://localhost/api/environments"));
+    const route = await import("@/app/api/api-keys/route");
+    const response = await route.GET(new Request("http://localhost/api/api-keys"));
     const json = await response.json();
 
     expect(response.status).toBe(403);
@@ -193,50 +202,64 @@ describe("environments api routes (integration)", () => {
     expect(json.error.code).toBe("FORBIDDEN");
   });
 
-  it("GET /api/environments returns items for read users", async () => {
+  it("GET /api/api-keys returns paginated items and ignores soft-deleted ones", async () => {
     const user = await createUser();
     const tenant = await createTenant("Tenant", "tenant");
+    const environment = await createEnvironment(tenant.id, "development", "Development");
     await createMembershipWithRole({
       userId: user.id,
       tenantId: tenant.id,
-      roleName: MASTER_ROLE_NAME,
-      isMaster: true,
+      roleName: "READER",
+      withApiKeysRead: true,
     });
-    await prisma.environment.create({
+
+    await prisma.apiKey.create({
       data: {
         tenantId: tenant.id,
-        key: "development",
-        name: "Development",
-        description: "Default dev environment.",
+        environmentId: environment.id,
+        name: "A",
+        keyPrefix: "fwf_a",
+        secretHash: "hash-a",
       },
     });
+
+    await prisma.apiKey.create({
+      data: {
+        tenantId: tenant.id,
+        environmentId: environment.id,
+        name: "B",
+        keyPrefix: "fwf_b",
+        secretHash: "hash-b",
+        deletedAt: new Date(),
+      },
+    });
+
     setSession(user.id, user.email);
 
-    const route = await import("@/app/api/environments/route");
-    const response = await route.GET(new Request("http://localhost/api/environments"));
+    const route = await import("@/app/api/api-keys/route");
+    const response = await route.GET(new Request("http://localhost/api/api-keys?limit=20"));
     const json = await response.json();
 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-request-id")).toBeTruthy();
     expect(json.success).toBe(true);
     expect(json.items).toHaveLength(1);
+    expect(json.items[0]?.name).toBe("A");
   });
 
-  it("GET /api/environments returns 400 for invalid limit", async () => {
+  it("GET /api/api-keys returns 400 for invalid limit", async () => {
     const user = await createUser();
     const tenant = await createTenant("Tenant", "tenant");
     await createMembershipWithRole({
       userId: user.id,
       tenantId: tenant.id,
-      roleName: MASTER_ROLE_NAME,
-      isMaster: true,
+      roleName: "READER",
+      withApiKeysRead: true,
     });
     setSession(user.id, user.email);
 
-    const route = await import("@/app/api/environments/route");
-    const response = await route.GET(
-      new Request("http://localhost/api/environments?limit=0"),
-    );
+    const route = await import("@/app/api/api-keys/route");
+    const response = await route.GET(new Request("http://localhost/api/api-keys?limit=0"));
     const json = await response.json();
 
     expect(response.status).toBe(400);
@@ -245,22 +268,71 @@ describe("environments api routes (integration)", () => {
     expect(json.error.code).toBe("VALIDATION_ERROR");
   });
 
-  it("GET /api/environments enforces rate limit", async () => {
+  it("GET /api/api-keys supports search and environment filter", async () => {
+    const user = await createUser();
+    const tenant = await createTenant("Tenant", "tenant");
+    const dev = await createEnvironment(tenant.id, "development", "Development");
+    const stg = await createEnvironment(tenant.id, "staging", "Staging");
+    await createMembershipWithRole({
+      userId: user.id,
+      tenantId: tenant.id,
+      roleName: "READER",
+      withApiKeysRead: true,
+    });
+
+    await prisma.apiKey.create({
+      data: {
+        tenantId: tenant.id,
+        environmentId: dev.id,
+        name: "CI Key",
+        keyPrefix: "fwf_ci",
+        secretHash: "hash-ci",
+      },
+    });
+
+    await prisma.apiKey.create({
+      data: {
+        tenantId: tenant.id,
+        environmentId: stg.id,
+        name: "Mobile Key",
+        keyPrefix: "fwf_mobile",
+        secretHash: "hash-mobile",
+      },
+    });
+
+    setSession(user.id, user.email);
+
+    const route = await import("@/app/api/api-keys/route");
+    const response = await route.GET(
+      new Request(
+        `http://localhost/api/api-keys?limit=20&q=ci&environmentId=${dev.id}`,
+      ),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.items).toHaveLength(1);
+    expect(json.items[0]?.name).toBe("CI Key");
+  });
+
+  it("GET /api/api-keys enforces rate limit", async () => {
     const user = await createUser();
     const tenant = await createTenant("Tenant", "tenant");
     await createMembershipWithRole({
       userId: user.id,
       tenantId: tenant.id,
-      roleName: MASTER_ROLE_NAME,
-      isMaster: true,
+      roleName: "READER",
+      withApiKeysRead: true,
     });
     setSession(user.id, user.email);
 
-    const route = await import("@/app/api/environments/route");
+    const route = await import("@/app/api/api-keys/route");
     let lastStatus = 200;
     let lastRequestId: string | null = null;
+
     for (let index = 0; index < 121; index += 1) {
-      const response = await route.GET(new Request("http://localhost/api/environments"));
+      const response = await route.GET(new Request("http://localhost/api/api-keys"));
       lastStatus = response.status;
       lastRequestId = response.headers.get("x-request-id");
     }
@@ -269,26 +341,32 @@ describe("environments api routes (integration)", () => {
     expect(lastRequestId).toBeTruthy();
   });
 
-  it("POST /api/environments denies users without write permission", async () => {
+  it("POST /api/api-keys denies users without write permission", async () => {
     const user = await createUser();
     const tenant = await createTenant("Tenant", "tenant");
+    const environment = await createEnvironment(tenant.id, "development", "Development");
     await createMembershipWithRole({
       userId: user.id,
       tenantId: tenant.id,
       roleName: "READER",
-      withEnvironmentsRead: true,
+      withApiKeysRead: true,
     });
     setSession(user.id, user.email);
 
-    const route = await import("@/app/api/environments/route");
+    const route = await import("@/app/api/api-keys/route");
     const response = await route.POST(
-      new Request("http://localhost/api/environments", {
+      new Request("http://localhost/api/api-keys", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          key: "staging",
-          name: "Staging",
-          description: "Staging",
+          environmentId: environment.id,
+          name: "Integration",
+          canReadFeatureFlags: true,
+          canWriteFeatureFlags: false,
+          canReadEnvironments: false,
+          canWriteEnvironments: false,
+          canReadProjects: false,
+          canWriteProjects: false,
           enabled: true,
         }),
       }),
@@ -301,26 +379,32 @@ describe("environments api routes (integration)", () => {
     expect(json.error.code).toBe("FORBIDDEN");
   });
 
-  it("POST /api/environments creates and logs for write users", async () => {
+  it("POST /api/api-keys creates key and logs create action", async () => {
     const user = await createUser();
     const tenant = await createTenant("Tenant", "tenant");
+    const environment = await createEnvironment(tenant.id, "development", "Development");
     await createMembershipWithRole({
       userId: user.id,
       tenantId: tenant.id,
       roleName: "EDITOR",
-      withEnvironmentsWrite: true,
+      withApiKeysWrite: true,
     });
     setSession(user.id, user.email);
 
-    const route = await import("@/app/api/environments/route");
+    const route = await import("@/app/api/api-keys/route");
     const response = await route.POST(
-      new Request("http://localhost/api/environments", {
+      new Request("http://localhost/api/api-keys", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          key: "staging",
-          name: "Staging",
-          description: "Staging environment",
+          environmentId: environment.id,
+          name: "Integration",
+          canReadFeatureFlags: true,
+          canWriteFeatureFlags: false,
+          canReadEnvironments: false,
+          canWriteEnvironments: false,
+          canReadProjects: false,
+          canWriteProjects: false,
           enabled: true,
         }),
       }),
@@ -330,144 +414,116 @@ describe("environments api routes (integration)", () => {
     expect(response.status).toBe(201);
     expect(response.headers.get("x-request-id")).toBeTruthy();
     expect(json.success).toBe(true);
-    expect(json.item.key).toBe("staging");
+    expect(typeof json.apiKey).toBe("string");
 
     const log = await prisma.actionLog.findFirst({
       where: {
         tenantId: tenant.id,
-        resource: "environment",
+        resource: "api_key",
         actionType: ActionLogType.CREATE,
       },
     });
     expect(log).not.toBeNull();
   });
 
-  it("PATCH /api/environments/[environmentId] updates and logs for write users", async () => {
+  it("PATCH /api/api-keys/[apiKeyId] updates and logs action", async () => {
     const user = await createUser();
     const tenant = await createTenant("Tenant", "tenant");
+    const environment = await createEnvironment(tenant.id, "development", "Development");
     await createMembershipWithRole({
       userId: user.id,
       tenantId: tenant.id,
       roleName: "EDITOR",
-      withEnvironmentsWrite: true,
+      withApiKeysWrite: true,
     });
-    const environment = await prisma.environment.create({
+
+    const apiKey = await prisma.apiKey.create({
       data: {
         tenantId: tenant.id,
-        key: "development",
-        name: "Development",
-        description: "Dev",
+        environmentId: environment.id,
+        name: "Before",
+        keyPrefix: "fwf_before",
+        secretHash: "hash-before",
       },
     });
+
     setSession(user.id, user.email);
 
-    const route = await import("@/app/api/environments/[environmentId]/route");
+    const route = await import("@/app/api/api-keys/[apiKeyId]/route");
     const response = await route.PATCH(
-      new Request(`http://localhost/api/environments/${environment.id}`, {
+      new Request(`http://localhost/api/api-keys/${apiKey.id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: "Development Updated",
-          enabled: false,
-        }),
+        body: JSON.stringify({ name: "After", enabled: false }),
       }),
-      { params: Promise.resolve({ environmentId: environment.id }) },
+      { params: Promise.resolve({ apiKeyId: apiKey.id }) },
     );
     const json = await response.json();
 
     expect(response.status).toBe(200);
     expect(response.headers.get("x-request-id")).toBeTruthy();
     expect(json.success).toBe(true);
-    expect(json.item.name).toBe("Development Updated");
+    expect(json.item.name).toBe("After");
     expect(json.item.enabled).toBe(false);
 
     const log = await prisma.actionLog.findFirst({
       where: {
         tenantId: tenant.id,
-        resource: "environment",
+        resource: "api_key",
         actionType: ActionLogType.UPDATE,
       },
     });
     expect(log).not.toBeNull();
   });
 
-  it("PATCH /api/environments/[environmentId] denies users without write permission", async () => {
+  it("DELETE /api/api-keys/[apiKeyId] soft-deletes and logs action", async () => {
     const user = await createUser();
     const tenant = await createTenant("Tenant", "tenant");
-    await createMembershipWithRole({
-      userId: user.id,
-      tenantId: tenant.id,
-      roleName: "READER",
-      withEnvironmentsRead: true,
-    });
-    const environment = await prisma.environment.create({
-      data: {
-        tenantId: tenant.id,
-        key: "development",
-        name: "Development",
-      },
-    });
-    setSession(user.id, user.email);
-
-    const route = await import("@/app/api/environments/[environmentId]/route");
-    const response = await route.PATCH(
-      new Request(`http://localhost/api/environments/${environment.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: "Blocked",
-        }),
-      }),
-      { params: Promise.resolve({ environmentId: environment.id }) },
-    );
-    const json = await response.json();
-
-    expect(response.status).toBe(403);
-    expect(response.headers.get("x-request-id")).toBeTruthy();
-    expect(json.success).toBe(false);
-    expect(json.error.code).toBe("FORBIDDEN");
-  });
-
-  it("PATCH /api/environments/[environmentId] does not allow updating key", async () => {
-    const user = await createUser();
-    const tenant = await createTenant("Tenant", "tenant");
+    const environment = await createEnvironment(tenant.id, "development", "Development");
     await createMembershipWithRole({
       userId: user.id,
       tenantId: tenant.id,
       roleName: "EDITOR",
-      withEnvironmentsWrite: true,
+      withApiKeysWrite: true,
     });
-    const environment = await prisma.environment.create({
+
+    const apiKey = await prisma.apiKey.create({
       data: {
         tenantId: tenant.id,
-        key: "development",
-        name: "Development",
+        environmentId: environment.id,
+        name: "To Remove",
+        keyPrefix: "fwf_delete",
+        secretHash: "hash-delete",
+        enabled: true,
       },
     });
+
     setSession(user.id, user.email);
 
-    const route = await import("@/app/api/environments/[environmentId]/route");
-    const response = await route.PATCH(
-      new Request(`http://localhost/api/environments/${environment.id}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          key: "production",
-          name: "Still Development",
-        }),
+    const route = await import("@/app/api/api-keys/[apiKeyId]/route");
+    const response = await route.DELETE(
+      new Request(`http://localhost/api/api-keys/${apiKey.id}`, {
+        method: "DELETE",
       }),
-      { params: Promise.resolve({ environmentId: environment.id }) },
+      { params: Promise.resolve({ apiKeyId: apiKey.id }) },
     );
     const json = await response.json();
 
-    expect(response.status).toBe(400);
-    expect(json.success).toBe(false);
-    expect(json.error.code).toBe("VALIDATION_ERROR");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-request-id")).toBeTruthy();
+    expect(json.success).toBe(true);
 
-    const unchanged = await prisma.environment.findUnique({
-      where: { id: environment.id },
-      select: { key: true, name: true },
+    const stored = await prisma.apiKey.findUnique({ where: { id: apiKey.id } });
+    expect(stored?.deletedAt).not.toBeNull();
+    expect(stored?.enabled).toBe(false);
+
+    const log = await prisma.actionLog.findFirst({
+      where: {
+        tenantId: tenant.id,
+        resource: "api_key",
+        actionType: ActionLogType.DELETE,
+      },
     });
-    expect(unchanged?.key).toBe("development");
+    expect(log).not.toBeNull();
   });
 });

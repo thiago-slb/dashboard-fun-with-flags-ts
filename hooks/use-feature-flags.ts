@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createFeatureFlagInputSchema,
   deleteFeatureFlagResponseSchema,
@@ -14,6 +14,8 @@ import {
 } from "@/lib/feature-flags/schemas";
 
 const FEATURE_FLAGS_QUERY_KEY = ["feature-flags"];
+const INFINITE_FEATURE_FLAGS_QUERY_KEY = [...FEATURE_FLAGS_QUERY_KEY, "infinite"];
+const FEATURE_FLAGS_PAGE_SIZE = 20;
 
 async function parseJson(response: Response) {
   return (await response.json().catch(() => null)) as unknown;
@@ -45,6 +47,42 @@ export function useFeatureFlagsQuery() {
   });
 }
 
+export function useInfiniteFeatureFlagsQuery(searchQuery: string) {
+  const normalizedSearch = searchQuery.trim();
+
+  return useInfiniteQuery({
+    queryKey: [...INFINITE_FEATURE_FLAGS_QUERY_KEY, normalizedSearch],
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams({
+        limit: String(FEATURE_FLAGS_PAGE_SIZE),
+      });
+
+      if (pageParam) {
+        params.set("cursor", pageParam);
+      }
+      if (normalizedSearch) {
+        params.set("q", normalizedSearch);
+      }
+
+      const response = await fetch(`/api/feature-flags?${params.toString()}`);
+      const payload = await parseJson(response);
+
+      if (!response.ok) {
+        throw new Error(getErrorMessage(payload, "Could not load feature flags."));
+      }
+
+      const parsed = listFeatureFlagsResponseSchema.safeParse(payload);
+      if (!parsed.success) {
+        throw new Error("Invalid response while loading feature flags.");
+      }
+
+      return parsed.data;
+    },
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+  });
+}
+
 export function useCreateFeatureFlagMutation() {
   const queryClient = useQueryClient();
 
@@ -71,6 +109,7 @@ export function useCreateFeatureFlagMutation() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: FEATURE_FLAGS_QUERY_KEY });
+      await queryClient.invalidateQueries({ queryKey: INFINITE_FEATURE_FLAGS_QUERY_KEY });
     },
   });
 }
@@ -106,6 +145,7 @@ export function useUpdateFeatureFlagMutation() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: FEATURE_FLAGS_QUERY_KEY });
+      await queryClient.invalidateQueries({ queryKey: INFINITE_FEATURE_FLAGS_QUERY_KEY });
     },
   });
 }
@@ -133,6 +173,7 @@ export function useDeleteFeatureFlagMutation() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: FEATURE_FLAGS_QUERY_KEY });
+      await queryClient.invalidateQueries({ queryKey: INFINITE_FEATURE_FLAGS_QUERY_KEY });
     },
   });
 }

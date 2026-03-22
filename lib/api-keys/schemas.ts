@@ -45,6 +45,7 @@ export const apiKeyItemSchema = z.object({
 export const listApiKeysResponseSchema = z.object({
   success: z.literal(true),
   items: z.array(apiKeyItemSchema),
+  nextCursor: z.string().nullable().optional(),
 });
 
 export const createApiKeyInputSchema = z.object({
@@ -56,7 +57,7 @@ export const createApiKeyInputSchema = z.object({
     .max(120, "Name must have at most 120 characters."),
   ...apiKeyPermissionsBaseSchema.shape,
   enabled: z.boolean().default(true),
-}).refine((data) => !data.canWriteFeatureFlags || data.canReadFeatureFlags, {
+}).strict().refine((data) => !data.canWriteFeatureFlags || data.canReadFeatureFlags, {
   message: "Feature flags write permission requires read permission.",
   path: ["canWriteFeatureFlags"],
 }).refine((data) => !data.canWriteEnvironments || data.canReadEnvironments, {
@@ -79,6 +80,7 @@ export const updateApiKeyInputSchema = z
     canWriteProjects: z.boolean().optional(),
     enabled: z.boolean().optional(),
   })
+  .strict()
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided.",
   })
@@ -140,3 +142,4 @@ export const apiKeyErrorResponseSchema = z.object({
 export type ApiKeyItem = z.infer<typeof apiKeyItemSchema>;
 export type CreateApiKeyInput = z.infer<typeof createApiKeyInputSchema>;
 export type UpdateApiKeyInput = z.infer<typeof updateApiKeyInputSchema>;
+export type ListApiKeysResponse = z.infer<typeof listApiKeysResponseSchema>;

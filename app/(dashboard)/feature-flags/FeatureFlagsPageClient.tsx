@@ -1,21 +1,23 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FeatureFlagFormFields, type FeatureFlagFormValue } from "@/components/feature-flags/FeatureFlagFormFields";
 import { Header } from "@/components/dashboard/Header";
 import { SideMenu } from "@/components/dashboard/SideMenu";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { H1 } from "@/components/ui/H1";
 import { H2 } from "@/components/ui/H2";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Subtitle } from "@/components/ui/Subtitle";
 import { Table, Tbody, Th, Thead, Tr } from "@/components/ui/Table";
 import {
-  getPatchForInlineEdit,
   useCreateFeatureFlagMutation,
   useDeleteFeatureFlagMutation,
-  useFeatureFlagsQuery,
+  useInfiniteFeatureFlagsQuery,
   useUpdateFeatureFlagMutation,
 } from "@/hooks/use-feature-flags";
 import { useEnvironmentsQuery } from "@/hooks/use-environments";
@@ -26,44 +28,71 @@ type FeatureFlagsPageClientProps = {
   userEmail: string;
 };
 
-export function FeatureFlagsPageClient({
-  userName,
-  userEmail,
-}: FeatureFlagsPageClientProps) {
+const defaultForm: FeatureFlagFormValue = {
+  environmentId: "",
+  key: "",
+  name: "",
+  description: "",
+  rolloutPercent: 0,
+  enabled: "disabled",
+  allowListEmails: [],
+};
+
+export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPageClientProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [newFlag, setNewFlag] = useState({
-    environmentId: "",
-    key: "",
-    name: "",
-    description: "",
-    enabled: false,
-    rolloutPercent: 0,
-  });
-
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [createForm, setCreateForm] = useState<FeatureFlagFormValue>(defaultForm);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingForm, setEditingForm] = useState({
-    environmentId: "",
-    key: "",
-    name: "",
-    description: "",
-    rolloutPercent: 0,
-  });
+  const [editForm, setEditForm] = useState<FeatureFlagFormValue>(defaultForm);
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  const featureFlagsQuery = useFeatureFlagsQuery();
+  const featureFlagsQuery = useInfiniteFeatureFlagsQuery(debouncedSearch);
   const environmentsQuery = useEnvironmentsQuery();
   const createMutation = useCreateFeatureFlagMutation();
   const updateMutation = useUpdateFeatureFlagMutation();
   const deleteMutation = useDeleteFeatureFlagMutation();
 
-  const loadingAny =
-    createMutation.isPending || updateMutation.isPending || deleteMutation.isPending;
-
-  const flags = useMemo(() => featureFlagsQuery.data ?? [], [featureFlagsQuery.data]);
-  const environments = useMemo(
-    () => environmentsQuery.data ?? [],
-    [environmentsQuery.data],
+  const environments = useMemo(() => environmentsQuery.data ?? [], [environmentsQuery.data]);
+  const flags = useMemo(
+    () => featureFlagsQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [featureFlagsQuery.data],
   );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(searchInput.trim());
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target) {
+      return;
+    }
+
+    const hasNextPage = featureFlagsQuery.hasNextPage;
+    const isFetchingNextPage = featureFlagsQuery.isFetchingNextPage;
+    const fetchNextPage = featureFlagsQuery.fetchNextPage;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          void fetchNextPage();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [featureFlagsQuery.fetchNextPage, featureFlagsQuery.hasNextPage, featureFlagsQuery.isFetchingNextPage]);
 
   const summary = useMemo(() => {
     const enabled = flags.filter((item) => item.enabled).length;
@@ -74,45 +103,65 @@ export function FeatureFlagsPageClient({
     };
   }, [flags]);
 
-  function startEdit(flag: FeatureFlagItem) {
+  function openEditModal(flag: FeatureFlagItem) {
     setEditingId(flag.id);
-    setEditingForm({
+    setEditForm({
       environmentId: flag.environmentId,
       key: flag.key,
       name: flag.name,
       description: flag.description ?? "",
       rolloutPercent: flag.rolloutPercent,
+      enabled: flag.enabled ? "enabled" : "disabled",
+      allowListEmails: flag.allowListEmails,
     });
+    setEditModalOpen(true);
   }
 
   async function handleCreate() {
     await createMutation.mutateAsync({
-      ...newFlag,
-      rolloutPercent: Number(newFlag.rolloutPercent),
+      environmentId: createForm.environmentId,
+      key: createForm.key,
+      name: createForm.name,
+      description: createForm.description,
+      rolloutPercent: createForm.rolloutPercent,
+      enabled: createForm.enabled === "enabled",
+      allowListEmails: createForm.allowListEmails,
     });
-    setNewFlag({
-      environmentId: "",
-      key: "",
-      name: "",
-      description: "",
-      enabled: false,
-      rolloutPercent: 0,
-    });
+    setCreateForm(defaultForm);
     setCreateModalOpen(false);
   }
 
-  async function handleSaveEdit(flag: FeatureFlagItem) {
-    const patch = getPatchForInlineEdit(flag, editingForm);
-    if (Object.keys(patch).length === 0) {
-      setEditingId(null);
+  async function handleSaveEdit() {
+    if (!editingId) {
       return;
     }
 
     await updateMutation.mutateAsync({
-      id: flag.id,
-      data: patch,
+      id: editingId,
+      data: {
+        environmentId: editForm.environmentId,
+        key: editForm.key,
+        name: editForm.name,
+        description: editForm.description.trim().length > 0 ? editForm.description : null,
+        rolloutPercent: editForm.rolloutPercent,
+        enabled: editForm.enabled === "enabled",
+        allowListEmails: editForm.allowListEmails,
+      },
     });
+
+    setEditModalOpen(false);
     setEditingId(null);
+    setEditForm(defaultForm);
+  }
+
+  async function handleDeleteConfirmed() {
+    if (!deleteTargetId) {
+      return;
+    }
+
+    await deleteMutation.mutateAsync(deleteTargetId);
+    setConfirmDeleteOpen(false);
+    setDeleteTargetId(null);
   }
 
   return (
@@ -140,12 +189,8 @@ export function FeatureFlagsPageClient({
         <main className="p-5 sm:p-7">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <H1>
-                Feature Flags
-              </H1>
-              <Subtitle>
-                Create, edit and control runtime flags.
-              </Subtitle>
+              <H1>Feature Flags</H1>
+              <Subtitle>Create, edit and control runtime flags.</Subtitle>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2 text-sm">
               <Badge variant="neutral">Total: {summary.total}</Badge>
@@ -155,7 +200,11 @@ export function FeatureFlagsPageClient({
                 type="button"
                 onClick={() => setCreateModalOpen(true)}
                 disabled={environments.length === 0}
-                className="h-9 rounded-lg bg-[#465fff] px-4 text-sm font-medium text-white hover:bg-[#364ed9] disabled:opacity-70"
+                leftIcon={(
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                    <path d="M12 5V19M5 12H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                )}
               >
                 Create Flag
               </Button>
@@ -163,23 +212,43 @@ export function FeatureFlagsPageClient({
           </div>
 
           {environments.length === 0 ? (
-            <p className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+            <Alert variant="warning" className="mb-5">
               You need at least one environment before creating a feature flag.
-            </p>
+            </Alert>
           ) : null}
 
           <Card className="mt-5">
-            <H2>Flags catalog</H2>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <H2>Flags catalog</H2>
+              <div className="relative w-full max-w-md">
+                <input
+                  type="text"
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  placeholder="Search by key, name, description or environment..."
+                  aria-label="Search feature flags"
+                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 pr-10 text-sm outline-none focus:border-[#465fff]"
+                />
+                {searchInput ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setSearchInput("")}
+                    aria-label="Clear search"
+                    className="absolute right-1 top-1 h-8 w-8 rounded-md text-slate-500 hover:bg-slate-100"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                      <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    </svg>
+                  </Button>
+                ) : null}
+              </div>
+            </div>
 
             {featureFlagsQuery.isLoading ? (
-              <p className="mt-4 text-sm text-slate-500">Loading flags...</p>
-            ) : featureFlagsQuery.error ? (
-              <Alert variant="error" className="mt-4">
-                {(featureFlagsQuery.error as Error).message}
-              </Alert>
-            ) : (
               <div className="mt-4 overflow-x-auto">
-                <Table className="w-full min-w-[780px] text-left text-sm">
+                <Table className="w-full min-w-[860px] text-left text-sm">
                   <Thead>
                     <Tr className="text-xs uppercase tracking-wide text-slate-500">
                       <Th className="pb-3">Environment</Th>
@@ -191,147 +260,108 @@ export function FeatureFlagsPageClient({
                     </Tr>
                   </Thead>
                   <Tbody className="text-slate-700">
-                    {flags.map((flag) => {
-                      const isEditing = editingId === flag.id;
-                      return (
-                        <Tr key={flag.id} className="border-t border-slate-100">
-                          <td className="py-3">
-                            {isEditing ? (
-                              <select
-                                className="h-9 w-full rounded-lg border border-slate-300 px-2 text-sm outline-none"
-                                value={editingForm.environmentId}
-                                onChange={(event) =>
-                                  setEditingForm((prev) => ({
-                                    ...prev,
-                                    environmentId: event.target.value,
-                                  }))
-                                }
-                              >
-                                {environments.map((environment) => (
-                                  <option key={environment.id} value={environment.id}>
-                                    {environment.name} ({environment.key})
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              <span className="font-medium text-slate-900">
-                                {flag.environmentName}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-3">
-                            {isEditing ? (
-                              <input
-                                className="h-9 w-full rounded-lg border border-slate-300 px-2 text-sm outline-none"
-                                value={editingForm.key}
-                                onChange={(event) =>
-                                  setEditingForm((prev) => ({
-                                    ...prev,
-                                    key: event.target.value,
-                                  }))
-                                }
-                              />
-                            ) : (
-                              <span className="font-medium text-slate-900">{flag.key}</span>
-                            )}
-                          </td>
-                          <td className="py-3">
-                            {isEditing ? (
-                              <input
-                                className="h-9 w-full rounded-lg border border-slate-300 px-2 text-sm outline-none"
-                                value={editingForm.name}
-                                onChange={(event) =>
-                                  setEditingForm((prev) => ({
-                                    ...prev,
-                                    name: event.target.value,
-                                  }))
-                                }
-                              />
-                            ) : (
-                              <span>{flag.name}</span>
-                            )}
-                          </td>
-                          <td className="py-3">
-                            {isEditing ? (
-                              <input
-                                type="number"
-                                min={0}
-                                max={100}
-                                className="h-9 w-20 rounded-lg border border-slate-300 px-2 text-sm outline-none"
-                                value={editingForm.rolloutPercent}
-                                onChange={(event) =>
-                                  setEditingForm((prev) => ({
-                                    ...prev,
-                                    rolloutPercent: Number(event.target.value),
-                                  }))
-                                }
-                              />
-                            ) : (
-                              `${flag.rolloutPercent}%`
-                            )}
-                          </td>
-                          <td className="py-3">
-                            <Button
-                              type="button"
-                              onClick={() =>
-                                updateMutation.mutate({
-                                  id: flag.id,
-                                  data: { enabled: !flag.enabled },
-                                })
-                              }
-                              disabled={loadingAny}
-                              variant="ghost"
-                              size="none"
-                            >
-                              <Badge variant={flag.enabled ? "success" : "neutral"} dot>
-                                {flag.enabled ? "Enabled" : "Disabled"}
-                              </Badge>
-                            </Button>
-                          </td>
-                          <td className="py-3">
-                            <div className="flex items-center gap-2">
-                              {isEditing ? (
-                                <>
-                                  <Button
-                                    type="button"
-                                    onClick={() => handleSaveEdit(flag)}
-                                    className="rounded-lg bg-[#465fff] px-3 py-1.5 text-xs font-medium text-white"
-                                  >
-                                    Save
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    onClick={() => setEditingId(null)}
-                                    className="rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700"
-                                  >
-                                    Cancel
-                                  </Button>
-                                </>
-                              ) : (
-                                <>
-                                  <Button
-                                    type="button"
-                                    onClick={() => startEdit(flag)}
-                                    className="rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-medium text-blue-700"
-                                  >
-                                    Edit
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    onClick={() => deleteMutation.mutate(flag.id)}
-                                    className="rounded-lg bg-red-100 px-3 py-1.5 text-xs font-medium text-red-700"
-                                  >
-                                    Delete
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-                          </td>
-                        </Tr>
-                      );
-                    })}
+                    {Array.from({ length: 6 }).map((_, index) => (
+                      <Tr key={`feature-flags-skeleton-${index}`} className="border-t border-slate-100">
+                        <td className="py-3"><Skeleton className="h-4 w-36" /></td>
+                        <td className="py-3"><Skeleton className="h-4 w-32" /></td>
+                        <td className="py-3"><Skeleton className="h-4 w-36" /></td>
+                        <td className="py-3"><Skeleton className="h-4 w-20" /></td>
+                        <td className="py-3"><Skeleton className="h-5 w-24 rounded-full" /></td>
+                        <td className="py-3">
+                          <div className="flex items-center gap-2">
+                            <Skeleton className="h-8 w-16 rounded-lg" />
+                            <Skeleton className="h-8 w-16 rounded-lg" />
+                          </div>
+                        </td>
+                      </Tr>
+                    ))}
                   </Tbody>
                 </Table>
+              </div>
+            ) : featureFlagsQuery.error ? (
+              <Alert variant="error" className="mt-4">
+                {(featureFlagsQuery.error as Error).message}
+              </Alert>
+            ) : flags.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-500">No feature flags found.</p>
+            ) : (
+              <div className="mt-4 overflow-x-auto">
+                <Table className="w-full min-w-[860px] text-left text-sm">
+                  <Thead>
+                    <Tr className="text-xs uppercase tracking-wide text-slate-500">
+                      <Th className="pb-3">Environment</Th>
+                      <Th className="pb-3">Key</Th>
+                      <Th className="pb-3">Name</Th>
+                      <Th className="pb-3">Rollout</Th>
+                      <Th className="pb-3">State</Th>
+                      <Th className="pb-3">Actions</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody className="text-slate-700">
+                    {flags.map((flag) => (
+                      <Tr key={flag.id} className="border-t border-slate-100">
+                        <td className="py-3">
+                          <span className="font-medium text-slate-900">{flag.environmentName}</span>
+                        </td>
+                        <td className="py-3 font-medium text-slate-900">{flag.key}</td>
+                        <td className="py-3">{flag.name}</td>
+                        <td className="py-3">{flag.rolloutPercent}%</td>
+                        <td className="py-3">
+                          <Button
+                            type="button"
+                            onClick={() => updateMutation.mutate({ id: flag.id, data: { enabled: !flag.enabled } })}
+                            variant="ghost"
+                            size="none"
+                          >
+                            <Badge variant={flag.enabled ? "success" : "neutral"} dot>
+                              {flag.enabled ? "Enabled" : "Disabled"}
+                            </Badge>
+                          </Button>
+                        </td>
+                        <td className="py-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="primary"
+                              size="sm"
+                              onClick={() => openEditModal(flag)}
+                              leftIcon={(
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
+                                  <path d="M12 20H21M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              )}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="danger"
+                              size="sm"
+                              onClick={() => {
+                                setDeleteTargetId(flag.id);
+                                setConfirmDeleteOpen(true);
+                              }}
+                              leftIcon={(
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" aria-hidden>
+                                  <path d="M3 6H5H21M8 6V4C8 3.44772 8.44772 3 9 3H15C15.5523 3 16 3.44772 16 4V6M19 6V20C19 20.5523 18.5523 21 18 21H6C5.44772 21 5 20.5523 5 20V6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                              )}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+                <div ref={loadMoreRef} className="h-1 w-full" aria-hidden />
+                {featureFlagsQuery.isFetchingNextPage ? (
+                  <div className="mt-3 flex items-center gap-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                ) : null}
               </div>
             )}
           </Card>
@@ -344,85 +374,19 @@ export function FeatureFlagsPageClient({
                   <Button
                     type="button"
                     onClick={() => setCreateModalOpen(false)}
-                    className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700"
+                    variant="secondary"
+                    className="bg-gray-200 text-black hover:bg-gray-300"
                   >
                     Close
                   </Button>
                 </div>
 
-                <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                  <select
-                    value={newFlag.environmentId}
-                    onChange={(event) =>
-                      setNewFlag((prev) => ({
-                        ...prev,
-                        environmentId: event.target.value,
-                      }))
-                    }
-                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
-                  >
-                    <option value="">Select environment</option>
-                    {environments.map((environment) => (
-                      <option key={environment.id} value={environment.id}>
-                        {environment.name} ({environment.key})
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="text"
-                    value={newFlag.key}
-                    onChange={(event) =>
-                      setNewFlag((prev) => ({ ...prev, key: event.target.value }))
-                    }
-                    placeholder="key (ex: checkout_v2)"
-                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
-                  />
-                  <input
-                    type="text"
-                    value={newFlag.name}
-                    onChange={(event) =>
-                      setNewFlag((prev) => ({ ...prev, name: event.target.value }))
-                    }
-                    placeholder="Name"
-                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
-                  />
-                  <input
-                    type="text"
-                    value={newFlag.description}
-                    onChange={(event) =>
-                      setNewFlag((prev) => ({ ...prev, description: event.target.value }))
-                    }
-                    placeholder="Description"
-                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={newFlag.rolloutPercent}
-                    onChange={(event) =>
-                      setNewFlag((prev) => ({
-                        ...prev,
-                        rolloutPercent: Number(event.target.value),
-                      }))
-                    }
-                    placeholder="Rollout %"
-                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
-                  />
-                  <label className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={newFlag.enabled}
-                      onChange={(event) =>
-                        setNewFlag((prev) => ({
-                          ...prev,
-                          enabled: event.target.checked,
-                        }))
-                      }
-                    />
-                    Enabled
-                  </label>
-                </div>
+                <FeatureFlagFormFields
+                  value={createForm}
+                  onChange={setCreateForm}
+                  environments={environments}
+                  prefix="create"
+                />
 
                 {createMutation.error ? (
                   <Alert variant="error" className="mt-3">
@@ -434,26 +398,108 @@ export function FeatureFlagsPageClient({
                   <Button
                     type="button"
                     onClick={() => setCreateModalOpen(false)}
-                    className="h-10 rounded-lg bg-slate-100 px-4 text-sm font-medium text-slate-700"
+                    variant="secondary"
+                    className="bg-gray-200 text-black hover:bg-gray-300"
                   >
                     Cancel
                   </Button>
                   <Button
                     type="button"
                     onClick={handleCreate}
-                    disabled={
-                      createMutation.isPending ||
-                      environments.length === 0 ||
-                      !newFlag.environmentId
-                    }
-                    className="h-10 rounded-lg bg-[#465fff] px-4 text-sm font-medium text-white hover:bg-[#364ed9] disabled:opacity-70"
+                    loading={createMutation.isPending}
+                    loadingLabel="Creating..."
+                    disabled={environments.length === 0 || !createForm.environmentId}
+                    leftIcon={(
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                        <path d="M12 5V19M5 12H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                    )}
                   >
-                    {createMutation.isPending ? "Creating..." : "Create"}
+                    Create
                   </Button>
                 </div>
               </div>
             </div>
           ) : null}
+
+          {editModalOpen ? (
+            <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 p-4">
+              <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
+                <div className="flex items-center justify-between gap-3">
+                  <H2 className="text-lg">Edit flag</H2>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setEditModalOpen(false);
+                      setEditingId(null);
+                    }}
+                    variant="secondary"
+                    className="bg-gray-200 text-black hover:bg-gray-300"
+                  >
+                    Close
+                  </Button>
+                </div>
+
+                <FeatureFlagFormFields
+                  value={editForm}
+                  onChange={setEditForm}
+                  environments={environments}
+                  prefix="edit"
+                  disabled={!editingId}
+                />
+
+                {updateMutation.error ? (
+                  <Alert variant="error" className="mt-3">
+                    {updateMutation.error.message}
+                  </Alert>
+                ) : null}
+
+                <div className="mt-4 flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setEditModalOpen(false);
+                      setEditingId(null);
+                    }}
+                    variant="secondary"
+                    className="bg-gray-200 text-black hover:bg-gray-300"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleSaveEdit}
+                    loading={updateMutation.isPending}
+                    loadingLabel="Saving..."
+                    disabled={!editingId || !editForm.environmentId}
+                    leftIcon={(
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                        <path d="M20 6L9 17L4 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  >
+                    Save
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <ConfirmDialog
+            isOpen={confirmDeleteOpen}
+            title="Delete feature flag?"
+            description="The flag will be archived (soft delete) and disabled."
+            confirmLabel="Delete"
+            cancelLabel="Cancel"
+            isPending={deleteMutation.isPending}
+            onCancel={() => {
+              setConfirmDeleteOpen(false);
+              setDeleteTargetId(null);
+            }}
+            onConfirm={() => {
+              void handleDeleteConfirmed();
+            }}
+          />
         </main>
       </div>
     </div>

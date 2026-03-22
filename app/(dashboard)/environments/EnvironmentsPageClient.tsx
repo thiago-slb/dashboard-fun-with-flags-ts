@@ -12,6 +12,7 @@ import { FormField } from "@/components/ui/FormField";
 import { H1 } from "@/components/ui/H1";
 import { H2 } from "@/components/ui/H2";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Select, SelectOption } from "@/components/ui/Select";
 import { Subtitle } from "@/components/ui/Subtitle";
 import { Table, Tbody, Th, Thead, Tr } from "@/components/ui/Table";
 import {
@@ -107,7 +108,11 @@ export function EnvironmentsPageClient({
 
     await updateMutation.mutateAsync({
       id: editingEnvironmentId,
-      data: editingEnvironment,
+      data: {
+        name: editingEnvironment.name,
+        description: editingEnvironment.description,
+        enabled: editingEnvironment.enabled,
+      },
     });
     setEditModalOpen(false);
     setEditingEnvironmentId(null);
@@ -179,8 +184,8 @@ export function EnvironmentsPageClient({
                   type="text"
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
-                  placeholder={t("projects.searchPlaceholder")}
-                  aria-label={t("projects.searchAria")}
+                  placeholder={t("environments.searchPlaceholder")}
+                  aria-label={t("environments.searchAria")}
                   className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 pr-10 text-sm outline-none focus:border-[#465fff]"
                 />
                 {searchInput ? (
@@ -189,7 +194,7 @@ export function EnvironmentsPageClient({
                     variant="ghost"
                     size="icon"
                     onClick={() => setSearchInput("")}
-                    aria-label={t("projects.clearSearch")}
+                    aria-label={t("environments.clearSearch")}
                     className="absolute right-1 top-1 h-8 w-8 rounded-md text-slate-500 hover:bg-slate-100"
                   >
                     <svg
@@ -252,7 +257,7 @@ export function EnvironmentsPageClient({
                 {(environmentsQuery.error as Error).message}
               </Alert>
             ) : environments.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-500">{t("projects.empty")}</p>
+              <p className="mt-4 text-sm text-slate-500">{t("environments.empty")}</p>
             ) : (
               <div className="mt-4 overflow-x-auto">
                 <Table className="w-full min-w-[760px] text-left text-sm">
@@ -414,7 +419,7 @@ export function EnvironmentsPageClient({
                     />
                   </FormField>
                   <FormField label={t("environments.enabledLabel")} className="mt-0">
-                    <select
+                    <Select
                       value={newEnvironment.enabled ? "enabled" : "disabled"}
                       onChange={(event) =>
                         setNewEnvironment((prev) => ({
@@ -422,11 +427,10 @@ export function EnvironmentsPageClient({
                           enabled: event.target.value === "enabled",
                         }))
                       }
-                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
                     >
-                      <option value="enabled">{t("environments.optionEnabled")}</option>
-                      <option value="disabled">{t("environments.optionDisabled")}</option>
-                    </select>
+                      <SelectOption value="enabled">{t("environments.optionEnabled")}</SelectOption>
+                      <SelectOption value="disabled">{t("environments.optionDisabled")}</SelectOption>
+                    </Select>
                   </FormField>
                 </div>
 
@@ -503,11 +507,10 @@ export function EnvironmentsPageClient({
                       id="edit-environment-key"
                       type="text"
                       value={editingEnvironment.key}
-                      onChange={(event) =>
-                        setEditingEnvironment((prev) => ({ ...prev, key: event.target.value }))
-                      }
+                      disabled
+                      readOnly
                       placeholder={t("environments.keyPlaceholder")}
-                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
+                      className="h-10 w-full cursor-not-allowed rounded-lg border border-slate-200 bg-slate-100 px-3 text-sm text-slate-500 outline-none"
                     />
                   </FormField>
                   <FormField
@@ -546,7 +549,7 @@ export function EnvironmentsPageClient({
                     />
                   </FormField>
                   <FormField label={t("environments.enabledLabel")} className="mt-0">
-                    <select
+                    <Select
                       value={editingEnvironment.enabled ? "enabled" : "disabled"}
                       onChange={(event) =>
                         setEditingEnvironment((prev) => ({
@@ -554,11 +557,10 @@ export function EnvironmentsPageClient({
                           enabled: event.target.value === "enabled",
                         }))
                       }
-                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
                     >
-                      <option value="enabled">{t("environments.optionEnabled")}</option>
-                      <option value="disabled">{t("environments.optionDisabled")}</option>
-                    </select>
+                      <SelectOption value="enabled">{t("environments.optionEnabled")}</SelectOption>
+                      <SelectOption value="disabled">{t("environments.optionDisabled")}</SelectOption>
+                    </Select>
                   </FormField>
                 </div>
 

@@ -1,19 +1,42 @@
+import { ActionLogType } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { getCurrentMembershipContext } from "@/lib/auth/current-membership";
+import { logAction } from "@/lib/audit/action-log";
+import { getUserApiKeyAccessInTenant, hasApiKeyAccess } from "@/lib/api-keys/access";
 import {
   apiKeyErrorResponseSchema,
   deleteApiKeyResponseSchema,
   updateApiKeyInputSchema,
   upsertApiKeyResponseSchema,
 } from "@/lib/api-keys/schemas";
+import { createRequestId, logApiEvent } from "@/lib/http/request-context";
+import {
+  buildNoStoreHeaders,
+  buildRateLimitHeaders,
+  mergeHeaders,
+} from "@/lib/http/response-headers";
 import { prisma } from "@/lib/prisma";
+import { consumeRateLimitServer } from "@/lib/security/rate-limit";
 
-function jsonError(status: number, code: string, message: string) {
+function jsonError(
+  status: number,
+  code: string,
+  message: string,
+  requestId: string,
+  headers?: Headers,
+) {
   const payload = apiKeyErrorResponseSchema.parse({
     success: false,
     error: { code, message },
   });
-  return NextResponse.json(payload, { status });
+  return NextResponse.json(payload, {
+    status,
+    headers: mergeHeaders(
+      { "x-request-id": requestId },
+      buildNoStoreHeaders(),
+      headers,
+    ),
+  });
 }
 
 function toItem(apiKey: {
@@ -60,9 +83,36 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ apiKeyId: string }> },
 ) {
+  const requestId = createRequestId();
   const membership = await getCurrentMembershipContext();
   if (!membership) {
-    return jsonError(401, "UNAUTHORIZED", "You must be authenticated.");
+    return jsonError(401, "UNAUTHORIZED", "You must be authenticated.", requestId);
+  }
+
+  const rateLimit = await consumeRateLimitServer(
+    `api-keys:update:${membership.userId}`,
+    50,
+    60_000,
+  );
+  const rateLimitHeaders = buildRateLimitHeaders(rateLimit);
+  if (!rateLimit.allowed) {
+    return jsonError(
+      429,
+      "RATE_LIMITED",
+      `Too many requests. Retry in ${rateLimit.retryAfterSeconds}s.`,
+      requestId,
+      rateLimitHeaders,
+    );
+  }
+
+  const access = await getUserApiKeyAccessInTenant(membership.userId, membership.tenantId);
+  if (!access || !hasApiKeyAccess("write", access.roleNames, access.permissions)) {
+    return jsonError(
+      403,
+      "FORBIDDEN",
+      "You do not have permission to update API keys.",
+      requestId,
+    );
   }
 
   const { apiKeyId } = await params;
@@ -71,12 +121,18 @@ export async function PATCH(
   try {
     body = await request.json();
   } catch {
-    return jsonError(400, "INVALID_JSON", "Invalid request body.");
+    return jsonError(400, "INVALID_JSON", "Invalid request body.", requestId, rateLimitHeaders);
   }
 
   const parsedInput = updateApiKeyInputSchema.safeParse(body);
   if (!parsedInput.success) {
-    return jsonError(400, "VALIDATION_ERROR", "Invalid API key data.");
+    return jsonError(
+      400,
+      "VALIDATION_ERROR",
+      "Invalid API key data.",
+      requestId,
+      rateLimitHeaders,
+    );
   }
 
   if (parsedInput.data.environmentId) {
@@ -89,7 +145,13 @@ export async function PATCH(
     });
 
     if (!environment) {
-      return jsonError(404, "ENVIRONMENT_NOT_FOUND", "Environment not found.");
+      return jsonError(
+        404,
+        "ENVIRONMENT_NOT_FOUND",
+        "Environment not found.",
+        requestId,
+        rateLimitHeaders,
+      );
     }
   }
 
@@ -97,12 +159,13 @@ export async function PATCH(
     where: {
       id: apiKeyId,
       tenantId: membership.tenantId,
+      deletedAt: null,
     },
     select: { id: true },
   });
 
   if (!existing) {
-    return jsonError(404, "NOT_FOUND", "API key not found.");
+    return jsonError(404, "NOT_FOUND", "API key not found.", requestId, rateLimitHeaders);
   }
 
   const updateData = { ...parsedInput.data };
@@ -125,31 +188,49 @@ export async function PATCH(
     updateData.canWriteProjects = false;
   }
 
-  const updated = await prisma.apiKey.update({
-    where: { id: apiKeyId },
-    data: updateData,
-    select: {
-      id: true,
-      environmentId: true,
-      environment: {
-        select: {
-          key: true,
-          name: true,
+  const updated = await prisma.$transaction(async (tx) => {
+    const item = await tx.apiKey.update({
+      where: { id: apiKeyId },
+      data: updateData,
+      select: {
+        id: true,
+        environmentId: true,
+        environment: {
+          select: {
+            key: true,
+            name: true,
+          },
         },
+        name: true,
+        keyPrefix: true,
+        canReadFeatureFlags: true,
+        canWriteFeatureFlags: true,
+        canReadEnvironments: true,
+        canWriteEnvironments: true,
+        canReadProjects: true,
+        canWriteProjects: true,
+        enabled: true,
+        lastUsedAt: true,
+        createdAt: true,
+        updatedAt: true,
       },
-      name: true,
-      keyPrefix: true,
-      canReadFeatureFlags: true,
-      canWriteFeatureFlags: true,
-      canReadEnvironments: true,
-      canWriteEnvironments: true,
-      canReadProjects: true,
-      canWriteProjects: true,
-      enabled: true,
-      lastUsedAt: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+    });
+
+    await logAction({
+      tx,
+      tenantId: membership.tenantId,
+      userId: membership.userId,
+      actionType: ActionLogType.UPDATE,
+      resource: "api_key",
+      resourceId: item.id,
+      details: {
+        name: item.name,
+        environmentId: item.environmentId,
+        enabled: item.enabled,
+      },
+    });
+
+    return item;
   });
 
   const payload = upsertApiKeyResponseSchema.parse({
@@ -157,16 +238,58 @@ export async function PATCH(
     item: toItem(updated),
   });
 
-  return NextResponse.json(payload);
+  logApiEvent({
+    requestId,
+    route: "/api/api-keys/[apiKeyId]",
+    userId: membership.userId,
+    level: "info",
+    message: "API key updated.",
+    extra: { apiKeyId },
+  });
+
+  return NextResponse.json(payload, {
+    headers: mergeHeaders(
+      { "x-request-id": requestId },
+      buildNoStoreHeaders(),
+      rateLimitHeaders,
+    ),
+  });
 }
 
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ apiKeyId: string }> },
 ) {
+  const requestId = createRequestId();
   const membership = await getCurrentMembershipContext();
   if (!membership) {
-    return jsonError(401, "UNAUTHORIZED", "You must be authenticated.");
+    return jsonError(401, "UNAUTHORIZED", "You must be authenticated.", requestId);
+  }
+
+  const rateLimit = await consumeRateLimitServer(
+    `api-keys:delete:${membership.userId}`,
+    30,
+    60_000,
+  );
+  const rateLimitHeaders = buildRateLimitHeaders(rateLimit);
+  if (!rateLimit.allowed) {
+    return jsonError(
+      429,
+      "RATE_LIMITED",
+      `Too many requests. Retry in ${rateLimit.retryAfterSeconds}s.`,
+      requestId,
+      rateLimitHeaders,
+    );
+  }
+
+  const access = await getUserApiKeyAccessInTenant(membership.userId, membership.tenantId);
+  if (!access || !hasApiKeyAccess("write", access.roleNames, access.permissions)) {
+    return jsonError(
+      403,
+      "FORBIDDEN",
+      "You do not have permission to delete API keys.",
+      requestId,
+    );
   }
 
   const { apiKeyId } = await params;
@@ -175,16 +298,32 @@ export async function DELETE(
     where: {
       id: apiKeyId,
       tenantId: membership.tenantId,
+      deletedAt: null,
     },
     select: { id: true },
   });
 
   if (!existing) {
-    return jsonError(404, "NOT_FOUND", "API key not found.");
+    return jsonError(404, "NOT_FOUND", "API key not found.", requestId, rateLimitHeaders);
   }
 
-  await prisma.apiKey.delete({
-    where: { id: apiKeyId },
+  await prisma.$transaction(async (tx) => {
+    await tx.apiKey.update({
+      where: { id: apiKeyId },
+      data: { deletedAt: new Date(), enabled: false },
+    });
+
+    await logAction({
+      tx,
+      tenantId: membership.tenantId,
+      userId: membership.userId,
+      actionType: ActionLogType.DELETE,
+      resource: "api_key",
+      resourceId: apiKeyId,
+      details: {
+        softDeleted: true,
+      },
+    });
   });
 
   const payload = deleteApiKeyResponseSchema.parse({
@@ -192,5 +331,20 @@ export async function DELETE(
     id: apiKeyId,
   });
 
-  return NextResponse.json(payload);
+  logApiEvent({
+    requestId,
+    route: "/api/api-keys/[apiKeyId]",
+    userId: membership.userId,
+    level: "info",
+    message: "API key deleted (soft).",
+    extra: { apiKeyId },
+  });
+
+  return NextResponse.json(payload, {
+    headers: mergeHeaders(
+      { "x-request-id": requestId },
+      buildNoStoreHeaders(),
+      rateLimitHeaders,
+    ),
+  });
 }

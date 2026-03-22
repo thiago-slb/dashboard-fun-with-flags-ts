@@ -39,11 +39,10 @@ export const createEnvironmentInputSchema = z.object({
     .optional()
     .transform((value) => (value && value.length > 0 ? value : undefined)),
   enabled: z.boolean().default(true),
-});
+}).strict();
 
 export const updateEnvironmentInputSchema = z
   .object({
-    key: createEnvironmentInputSchema.shape.key.optional(),
     name: createEnvironmentInputSchema.shape.name.optional(),
     description: z
       .string()
@@ -53,6 +52,7 @@ export const updateEnvironmentInputSchema = z
       .optional(),
     enabled: z.boolean().optional(),
   })
+  .strict()
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided.",
   });

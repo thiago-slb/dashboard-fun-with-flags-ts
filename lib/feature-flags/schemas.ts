@@ -8,6 +8,7 @@ export const featureFlagSchema = z.object({
   key: z.string(),
   name: z.string(),
   description: z.string().nullable(),
+  allowListEmails: z.array(z.string().email()),
   enabled: z.boolean(),
   rolloutPercent: z.number().int().min(0).max(100),
   createdAt: z.string(),
@@ -17,6 +18,7 @@ export const featureFlagSchema = z.object({
 export const listFeatureFlagsResponseSchema = z.object({
   success: z.literal(true),
   items: z.array(featureFlagSchema),
+  nextCursor: z.string().nullable().optional(),
 });
 
 export const createFeatureFlagInputSchema = z.object({
@@ -42,6 +44,7 @@ export const createFeatureFlagInputSchema = z.object({
     .max(500, "Description must have at most 500 characters.")
     .optional()
     .transform((value) => (value && value.length > 0 ? value : undefined)),
+  allowListEmails: z.array(z.string().trim().email("Invalid allow-list email.")).max(200).optional(),
   enabled: z.boolean().default(false),
   rolloutPercent: z.number().int().min(0).max(100).default(0),
 });
@@ -57,6 +60,7 @@ export const updateFeatureFlagInputSchema = z
       .max(500, "Description must have at most 500 characters.")
       .nullable()
       .optional(),
+    allowListEmails: z.array(z.string().trim().email("Invalid allow-list email.")).max(200).optional(),
     enabled: z.boolean().optional(),
     rolloutPercent: z.number().int().min(0).max(100).optional(),
   })

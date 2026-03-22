@@ -1,6 +1,10 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   apiKeyErrorResponseSchema,
   createApiKeyInputSchema,
@@ -10,10 +14,13 @@ import {
   updateApiKeyInputSchema,
   upsertApiKeyResponseSchema,
   type CreateApiKeyInput,
+  type ListApiKeysResponse,
   type UpdateApiKeyInput,
 } from "@/lib/api-keys/schemas";
 
 const API_KEYS_QUERY_KEY = ["api-keys"];
+const INFINITE_API_KEYS_QUERY_KEY = [...API_KEYS_QUERY_KEY, "infinite"];
+const API_KEYS_PAGE_SIZE = 20;
 
 async function parseJson(response: Response) {
   return (await response.json().catch(() => null)) as unknown;
@@ -24,11 +31,29 @@ function getErrorMessage(payload: unknown, fallback: string) {
   return parsed.success ? parsed.data.error.message : fallback;
 }
 
-export function useApiKeysQuery() {
-  return useQuery({
-    queryKey: API_KEYS_QUERY_KEY,
-    queryFn: async () => {
-      const response = await fetch("/api/api-keys");
+export function useInfiniteApiKeysQuery(searchQuery: string, environmentId: string) {
+  const normalizedSearch = searchQuery.trim();
+  const normalizedEnvironment = environmentId.trim();
+
+  return useInfiniteQuery({
+    queryKey: [...INFINITE_API_KEYS_QUERY_KEY, normalizedSearch, normalizedEnvironment],
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam }) => {
+      const params = new URLSearchParams({
+        limit: String(API_KEYS_PAGE_SIZE),
+      });
+
+      if (pageParam) {
+        params.set("cursor", pageParam);
+      }
+      if (normalizedSearch) {
+        params.set("q", normalizedSearch);
+      }
+      if (normalizedEnvironment) {
+        params.set("environmentId", normalizedEnvironment);
+      }
+
+      const response = await fetch(`/api/api-keys?${params.toString()}`);
       const payload = await parseJson(response);
       if (!response.ok) {
         throw new Error(getErrorMessage(payload, "Could not load API keys."));
@@ -39,8 +64,9 @@ export function useApiKeysQuery() {
         throw new Error("Invalid response while loading API keys.");
       }
 
-      return parsed.data.items;
+      return parsed.data;
     },
+    getNextPageParam: (lastPage: ListApiKeysResponse) => lastPage.nextCursor ?? undefined,
   });
 }
 
@@ -68,7 +94,7 @@ export function useCreateApiKeyMutation() {
       return parsed.data;
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: API_KEYS_QUERY_KEY });
+      await queryClient.invalidateQueries({ queryKey: INFINITE_API_KEYS_QUERY_KEY });
     },
   });
 }
@@ -102,7 +128,7 @@ export function useUpdateApiKeyMutation() {
       return parsed.data.item;
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: API_KEYS_QUERY_KEY });
+      await queryClient.invalidateQueries({ queryKey: INFINITE_API_KEYS_QUERY_KEY });
     },
   });
 }
@@ -128,7 +154,7 @@ export function useDeleteApiKeyMutation() {
       return parsed.data.id;
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: API_KEYS_QUERY_KEY });
+      await queryClient.invalidateQueries({ queryKey: INFINITE_API_KEYS_QUERY_KEY });
     },
   });
 }
