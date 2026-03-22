@@ -7,10 +7,18 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Header } from "@/components/dashboard/Header";
 import { SideMenu } from "@/components/dashboard/SideMenu";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { H1 } from "@/components/ui/H1";
+import { H2 } from "@/components/ui/H2";
 import {
   signUpErrorResponseSchema,
+  updatePasswordInputSchema,
+  updatePasswordSuccessResponseSchema,
   updateProfileInputSchema,
   updateProfileSuccessResponseSchema,
+  type UpdatePasswordInput,
   type UpdateProfileInput,
 } from "@/lib/auth/schemas";
 
@@ -40,16 +48,18 @@ export function ProfilePageClient({
 }: ProfilePageClientProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [profileFeedback, setProfileFeedback] = useState<string | null>(null);
+  const [passwordFeedback, setPasswordFeedback] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState(userName);
   const [displayEmail, setDisplayEmail] = useState(userEmail);
   const router = useRouter();
 
   const {
-    register,
-    handleSubmit,
-    formState: { errors, isDirty },
+    register: registerProfile,
+    handleSubmit: handleProfileSubmit,
+    formState: { errors: profileErrors, isDirty: isProfileDirty },
   } = useForm<UpdateProfileInput>({
     resolver: zodResolver(updateProfileInputSchema),
     defaultValues: {
@@ -58,8 +68,22 @@ export function ProfilePageClient({
     },
   });
 
-  const onSubmit = handleSubmit(async (values) => {
-    setFeedback(null);
+  const {
+    register: registerPassword,
+    handleSubmit: handlePasswordSubmit,
+    reset: resetPasswordForm,
+    formState: { errors: passwordErrors, isDirty: isPasswordDirty },
+  } = useForm<UpdatePasswordInput>({
+    resolver: zodResolver(updatePasswordInputSchema),
+    defaultValues: {
+      currentPassword: "",
+      newPassword: "",
+      confirmNewPassword: "",
+    },
+  });
+
+  const onSubmit = handleProfileSubmit(async (values) => {
+    setProfileFeedback(null);
     setIsSaving(true);
 
     const response = await fetch("/api/auth/profile", {
@@ -74,7 +98,7 @@ export function ProfilePageClient({
 
     if (!response.ok) {
       const parsedError = signUpErrorResponseSchema.safeParse(payload);
-      setFeedback(
+      setProfileFeedback(
         parsedError.success
           ? parsedError.data.error.message
           : "Could not update profile.",
@@ -85,7 +109,7 @@ export function ProfilePageClient({
 
     const parsed = updateProfileSuccessResponseSchema.safeParse(payload);
     if (!parsed.success) {
-      setFeedback("Invalid response while updating profile.");
+      setProfileFeedback("Invalid response while updating profile.");
       setIsSaving(false);
       return;
     }
@@ -93,13 +117,51 @@ export function ProfilePageClient({
     const updated = parsed.data.user;
     setDisplayName(updated.name?.trim() ? updated.name : updated.email.split("@")[0]);
     setDisplayEmail(updated.email);
-    setFeedback("Profile updated successfully.");
+    setProfileFeedback("Profile updated successfully.");
     setIsSaving(false);
     router.refresh();
   });
 
+  const onSubmitPassword = handlePasswordSubmit(async (values) => {
+    setPasswordFeedback(null);
+    setIsSavingPassword(true);
+
+    const response = await fetch("/api/auth/password", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(values),
+    });
+
+    const payload: unknown = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      const parsedError = signUpErrorResponseSchema.safeParse(payload);
+      setPasswordFeedback(
+        parsedError.success
+          ? parsedError.data.error.message
+          : "Could not update password.",
+      );
+      setIsSavingPassword(false);
+      return;
+    }
+
+    const parsed = updatePasswordSuccessResponseSchema.safeParse(payload);
+    if (!parsed.success) {
+      setPasswordFeedback("Invalid response while updating password.");
+      setIsSavingPassword(false);
+      return;
+    }
+
+    setPasswordFeedback("Password updated successfully.");
+    setIsSavingPassword(false);
+    resetPasswordForm();
+  });
+
   async function handleLogout() {
-    setFeedback(null);
+    setProfileFeedback(null);
+    setPasswordFeedback(null);
     setIsLoggingOut(true);
 
     await fetch("/api/auth/logout", {
@@ -115,8 +177,10 @@ export function ProfilePageClient({
       <SideMenu isOpen={sidebarOpen} />
 
       {sidebarOpen ? (
-        <button
+        <Button
           type="button"
+          variant="unstyled"
+          size="none"
           aria-label="Close sidebar overlay"
           className="fixed inset-0 z-30 bg-gray-900/50 xl:hidden"
           onClick={() => setSidebarOpen(false)}
@@ -139,9 +203,9 @@ export function ProfilePageClient({
               <span>/</span>
               <span className="font-medium text-slate-700">Profile</span>
             </nav>
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+            <H1>
               Profile
-            </h1>
+            </H1>
           </div>
 
           <section className="rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,24,40,0.06)]">
@@ -153,7 +217,7 @@ export function ProfilePageClient({
                     {getInitials(displayName)}
                   </div>
                   <div className="-mt-2">
-                    <h2 className="text-xl font-semibold text-white pb-2">{displayName}</h2>
+                    <H2 className="text-xl text-white pb-2">{displayName}</H2>
                     <p className="text-sm text-slate-500">{displayEmail}</p>
                   </div>
                 </div>
@@ -170,7 +234,7 @@ export function ProfilePageClient({
           </section>
 
           <div className="mt-6 grid gap-5 xl:grid-cols-2">
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.06)]">
+            <Card>
               <h3 className="text-base font-semibold tracking-tight text-slate-900">
                 Personal Information
               </h3>
@@ -186,11 +250,13 @@ export function ProfilePageClient({
                   <input
                     id="name"
                     type="text"
-                    {...register("name")}
+                    {...registerProfile("name")}
                     className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-[#465fff]"
                   />
-                  {errors.name ? (
-                    <p className="mt-1 text-xs text-red-600">{errors.name.message}</p>
+                  {profileErrors.name ? (
+                    <Alert variant="error" size="sm" className="mt-1">
+                      {profileErrors.name.message}
+                    </Alert>
                   ) : null}
                 </div>
                 <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-4 py-3">
@@ -203,39 +269,39 @@ export function ProfilePageClient({
                   <input
                     id="email"
                     type="email"
-                    {...register("email")}
+                    {...registerProfile("email")}
                     className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-[#465fff]"
                   />
-                  {errors.email ? (
-                    <p className="mt-1 text-xs text-red-600">{errors.email.message}</p>
+                  {profileErrors.email ? (
+                    <Alert variant="error" size="sm" className="mt-1">
+                      {profileErrors.email.message}
+                    </Alert>
                   ) : null}
                 </div>
                 <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-4 py-3">
                   <p className="text-xs uppercase tracking-wide text-slate-500">User ID</p>
                   <p className="mt-1 break-all text-sm font-medium text-slate-900">{userId}</p>
                 </div>
-                {feedback ? (
-                  <p
-                    className={`text-sm ${
-                      feedback.includes("successfully")
-                        ? "text-emerald-700"
-                        : "text-red-600"
-                    }`}
+                {profileFeedback ? (
+                  <Alert
+                    variant={
+                      profileFeedback.includes("successfully") ? "success" : "error"
+                    }
                   >
-                    {feedback}
-                  </p>
+                    {profileFeedback}
+                  </Alert>
                 ) : null}
-                <button
+                <Button
                   type="submit"
-                  disabled={isSaving || !isDirty}
+                  disabled={isSaving || !isProfileDirty}
                   className="h-10 rounded-lg bg-[#465fff] px-4 text-sm font-medium text-white hover:bg-[#364ed9] disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {isSaving ? "Saving..." : "Save changes"}
-                </button>
+                </Button>
               </form>
-            </section>
+            </Card>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.06)]">
+            <Card>
               <h3 className="text-base font-semibold tracking-tight text-slate-900">
                 Access Information
               </h3>
@@ -254,23 +320,107 @@ export function ProfilePageClient({
                   <dd className="mt-1 text-sm font-medium text-slate-900">{workspaceName}</dd>
                 </div>
               </dl>
-            </section>
+            </Card>
           </div>
 
-          <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.06)]">
+          <Card className="mt-6">
+            <h3 className="text-base font-semibold tracking-tight text-slate-900">Security</h3>
+            <p className="mt-2 text-sm text-slate-600">Update your account password.</p>
+
+            <form className="mt-4 space-y-3" onSubmit={onSubmitPassword}>
+              <div>
+                <label
+                  htmlFor="currentPassword"
+                  className="text-xs uppercase tracking-wide text-slate-500"
+                >
+                  Current Password
+                </label>
+                <input
+                  id="currentPassword"
+                  type="password"
+                  {...registerPassword("currentPassword")}
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-[#465fff]"
+                />
+                {passwordErrors.currentPassword ? (
+                  <Alert variant="error" size="sm" className="mt-1">
+                    {passwordErrors.currentPassword.message}
+                  </Alert>
+                ) : null}
+              </div>
+
+              <div>
+                <label
+                  htmlFor="newPassword"
+                  className="text-xs uppercase tracking-wide text-slate-500"
+                >
+                  New Password
+                </label>
+                <input
+                  id="newPassword"
+                  type="password"
+                  {...registerPassword("newPassword")}
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-[#465fff]"
+                />
+                {passwordErrors.newPassword ? (
+                  <Alert variant="error" size="sm" className="mt-1">
+                    {passwordErrors.newPassword.message}
+                  </Alert>
+                ) : null}
+              </div>
+
+              <div>
+                <label
+                  htmlFor="confirmNewPassword"
+                  className="text-xs uppercase tracking-wide text-slate-500"
+                >
+                  Confirm New Password
+                </label>
+                <input
+                  id="confirmNewPassword"
+                  type="password"
+                  {...registerPassword("confirmNewPassword")}
+                  className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none focus:border-[#465fff]"
+                />
+                {passwordErrors.confirmNewPassword ? (
+                  <Alert variant="error" size="sm" className="mt-1">
+                    {passwordErrors.confirmNewPassword.message}
+                  </Alert>
+                ) : null}
+              </div>
+
+              {passwordFeedback ? (
+                <Alert
+                  variant={
+                    passwordFeedback.includes("successfully") ? "success" : "error"
+                  }
+                >
+                  {passwordFeedback}
+                </Alert>
+              ) : null}
+
+              <Button
+                type="submit"
+                disabled={isSavingPassword || !isPasswordDirty}
+                className="h-10 rounded-lg bg-[#465fff] px-4 text-sm font-medium text-white hover:bg-[#364ed9] disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {isSavingPassword ? "Updating..." : "Update password"}
+              </Button>
+            </form>
+
+            <hr className="my-5 border-slate-200" />
             <h3 className="text-base font-semibold tracking-tight text-slate-900">Session</h3>
             <p className="mt-2 text-sm text-slate-600">
               Use this button to safely end your current session.
             </p>
-            <button
+            <Button
               type="button"
               onClick={handleLogout}
               disabled={isLoggingOut}
               className="mt-4 h-10 rounded-lg bg-red-600 px-4 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isLoggingOut ? "Signing out..." : "Sign out"}
-            </button>
-          </section>
+            </Button>
+          </Card>
         </main>
       </div>
     </div>

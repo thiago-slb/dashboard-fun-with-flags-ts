@@ -3,6 +3,10 @@
 import { useState, type ReactNode } from "react";
 import { Header } from "@/components/dashboard/Header";
 import { SideMenu } from "@/components/dashboard/SideMenu";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { H2 } from "@/components/ui/H2";
+import { Table, Tbody, Th, Thead, Tr } from "@/components/ui/Table";
 
 type DashboardPageClientProps = {
   userName: string;
@@ -172,8 +176,10 @@ export function DashboardPageClient({
       <SideMenu isOpen={sidebarOpen} />
 
       {sidebarOpen ? (
-        <button
+        <Button
           type="button"
+          variant="unstyled"
+          size="none"
           aria-label="Close sidebar overlay"
           className="fixed inset-0 z-30 bg-gray-900/50 xl:hidden"
           onClick={() => setSidebarOpen(false)}
@@ -192,9 +198,10 @@ export function DashboardPageClient({
 
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {summaryCards.map((item) => (
-              <div
+              <Card
                 key={item.title}
-                className="rounded-2xl border border-slate-200/90 bg-white px-5 py-4 shadow-[0_1px_2px_rgba(16,24,40,0.06)]"
+                as="div"
+                className="border-slate-200/90 px-5 py-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -208,16 +215,16 @@ export function DashboardPageClient({
                   </span>
                 </div>
                 <p className={`mt-3 text-xs font-medium ${item.hintColor}`}>{item.hint}</p>
-              </div>
+              </Card>
             ))}
           </div>
 
           <div className="mt-5 grid gap-5 xl:grid-cols-3">
-            <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.06)] xl:col-span-2">
+            <Card className="border-slate-200/90 xl:col-span-2">
               <div className="mb-5 flex items-center justify-between">
-                <h2 className="text-base font-semibold tracking-tight text-slate-900">
+                <H2 className="tracking-tight">
                   Environment Health
-                </h2>
+                </H2>
                 <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs text-slate-600">
                   Last sync: 2m ago
                 </span>
@@ -241,12 +248,12 @@ export function DashboardPageClient({
                   </div>
                 ))}
               </div>
-            </section>
+            </Card>
 
-            <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.06)]">
-              <h2 className="text-base font-semibold tracking-tight text-slate-900">
+            <Card className="border-slate-200/90">
+              <H2 className="tracking-tight">
                 Rollout Alerts
-              </h2>
+              </H2>
               <ul className="mt-4 space-y-3 text-sm">
                 <li className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800">
                   `checkout_v2` rollback triggered in EU.
@@ -258,27 +265,27 @@ export function DashboardPageClient({
                   `search_semantic_ranking` ready for +10% rollout.
                 </li>
               </ul>
-            </section>
+            </Card>
           </div>
 
           <div className="mt-5 grid gap-5 xl:grid-cols-2">
-            <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.06)]">
-              <h2 className="text-base font-semibold tracking-tight text-slate-900">
+            <Card className="border-slate-200/90">
+              <H2 className="tracking-tight">
                 Critical Flags
-              </h2>
+              </H2>
               <div className="mt-4 overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="text-xs uppercase tracking-wide text-slate-500">
-                      <th className="pb-3 font-medium">Flag</th>
-                      <th className="pb-3 font-medium">Owner</th>
-                      <th className="pb-3 font-medium">Rollout</th>
-                      <th className="pb-3 font-medium">Exposure</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-slate-700">
+                <Table className="w-full text-left text-sm">
+                  <Thead>
+                    <Tr className="text-xs uppercase tracking-wide text-slate-500">
+                      <Th className="pb-3 font-medium">Flag</Th>
+                      <Th className="pb-3 font-medium">Owner</Th>
+                      <Th className="pb-3 font-medium">Rollout</Th>
+                      <Th className="pb-3 font-medium">Exposure</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody className="text-slate-700">
                     {criticalFlags.map((item) => (
-                      <tr key={item.key} className="border-t border-slate-100">
+                      <Tr key={item.key} className="border-t border-slate-100">
                         <td className="py-3 font-medium text-slate-900">{item.key}</td>
                         <td className="py-3">{item.owner}</td>
                         <td className="py-3">{item.rollout}</td>
@@ -293,17 +300,17 @@ export function DashboardPageClient({
                             {item.exposure}
                           </span>
                         </td>
-                      </tr>
+                      </Tr>
                     ))}
-                  </tbody>
-                </table>
+                  </Tbody>
+                </Table>
               </div>
-            </section>
+            </Card>
 
-            <section className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.06)]">
-              <h2 className="text-base font-semibold tracking-tight text-slate-900">
+            <Card className="border-slate-200/90">
+              <H2 className="tracking-tight">
                 Recent Changes
-              </h2>
+              </H2>
               <ul className="mt-4 space-y-3">
                 {recentChanges.map((change) => (
                   <li
@@ -319,7 +326,7 @@ export function DashboardPageClient({
                   </li>
                 ))}
               </ul>
-            </section>
+            </Card>
           </div>
         </main>
       </div>

@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useI18n } from "@/components/i18n/I18nProvider";
+import { useProjectsQuery, useSetActiveProjectMutation } from "@/hooks/use-projects";
 
 type SideMenuProps = {
   isOpen: boolean;
@@ -9,11 +11,15 @@ type SideMenuProps = {
 
 export function SideMenu({ isOpen }: SideMenuProps) {
   const pathname = usePathname();
+  const { t } = useI18n();
 
   const isDashboard = pathname === "/";
   const isFeatureFlags = pathname === "/feature-flags";
   const isApiKeys = pathname === "/api-keys";
   const isEnvironments = pathname === "/environments";
+  const isProjects = pathname === "/projects";
+  const projectsQuery = useProjectsQuery();
+  const setActiveProjectMutation = useSetActiveProjectMutation();
 
   const itemClass = (active: boolean) =>
     active
@@ -35,10 +41,64 @@ export function SideMenu({ isOpen }: SideMenuProps) {
         </Link>
       </div>
 
+      <div className="mb-6">
+        <label className="mb-2 inline-flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-400">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden
+          >
+            <path
+              d="M4 6.5C4 5.67157 4.67157 5 5.5 5H10.5C11.3284 5 12 5.67157 12 6.5V11.5C12 12.3284 11.3284 13 10.5 13H5.5C4.67157 13 4 12.3284 4 11.5V6.5Z"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            />
+            <path
+              d="M12 6.5C12 5.67157 12.6716 5 13.5 5H18.5C19.3284 5 20 5.67157 20 6.5V11.5C20 12.3284 19.3284 13 18.5 13H13.5C12.6716 13 12 12.3284 12 11.5V6.5Z"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            />
+            <path
+              d="M4 13.5C4 12.6716 4.67157 12 5.5 12H10.5C11.3284 12 12 12.6716 12 13.5V18.5C12 19.3284 11.3284 20 10.5 20H5.5C4.67157 20 4 19.3284 4 18.5V13.5Z"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            />
+          </svg>
+          {t("sideMenu.projectActive")}
+        </label>
+        <select
+          className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-[#465fff]"
+          value={(projectsQuery.data ?? []).find((item) => item.isActive)?.id ?? ""}
+          onChange={async (event) => {
+            const projectId = event.target.value;
+            if (!projectId) {
+              return;
+            }
+            await setActiveProjectMutation.mutateAsync({ projectId });
+            window.location.reload();
+          }}
+          disabled={projectsQuery.isLoading || setActiveProjectMutation.isPending}
+        >
+          <option value="">
+            {projectsQuery.isLoading
+              ? t("sideMenu.loadingProjects")
+              : t("sideMenu.selectProject")}
+          </option>
+          {(projectsQuery.data ?? []).map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
       <nav className="no-scrollbar flex flex-1 flex-col overflow-y-auto">
         <div className="mb-6">
           <h3 className="mb-4 text-xs uppercase leading-[20px] text-gray-400">
-            MENU
+            {t("sideMenu.menu")}
           </h3>
           <ul className="flex flex-col gap-1">
             <li>
@@ -61,7 +121,7 @@ export function SideMenu({ isOpen }: SideMenuProps) {
                     fill="currentColor"
                   />
                 </svg>
-                <span className="truncate">Dashboard</span>
+                <span className="truncate">{t("sideMenu.dashboard")}</span>
               </Link>
             </li>
             <li>
@@ -85,7 +145,7 @@ export function SideMenu({ isOpen }: SideMenuProps) {
                     strokeLinejoin="round"
                   />
                 </svg>
-                <span className="truncate">Feature Flags</span>
+                <span className="truncate">{t("sideMenu.featureFlags")}</span>
               </Link>
             </li>
             <li>
@@ -109,7 +169,7 @@ export function SideMenu({ isOpen }: SideMenuProps) {
                     strokeLinejoin="round"
                   />
                 </svg>
-                <span className="truncate">API Keys</span>
+                <span className="truncate">{t("sideMenu.apiKeys")}</span>
               </Link>
             </li>
             <li>
@@ -139,7 +199,39 @@ export function SideMenu({ isOpen }: SideMenuProps) {
                     strokeLinejoin="round"
                   />
                 </svg>
-                <span className="truncate">Environments</span>
+                <span className="truncate">{t("sideMenu.environments")}</span>
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/projects"
+                className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium ${itemClass(isProjects)}`}
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden
+                >
+                  <path
+                    d="M4 6.5C4 5.67157 4.67157 5 5.5 5H10.5C11.3284 5 12 5.67157 12 6.5V11.5C12 12.3284 11.3284 13 10.5 13H5.5C4.67157 13 4 12.3284 4 11.5V6.5Z"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                  />
+                  <path
+                    d="M12 6.5C12 5.67157 12.6716 5 13.5 5H18.5C19.3284 5 20 5.67157 20 6.5V11.5C20 12.3284 19.3284 13 18.5 13H13.5C12.6716 13 12 12.3284 12 11.5V6.5Z"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                  />
+                  <path
+                    d="M4 13.5C4 12.6716 4.67157 12 5.5 12H10.5C11.3284 12 12 12.6716 12 13.5V18.5C12 19.3284 11.3284 20 10.5 20H5.5C4.67157 20 4 19.3284 4 18.5V13.5Z"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                  />
+                </svg>
+                <span className="truncate">{t("sideMenu.projects")}</span>
               </Link>
             </li>
           </ul>

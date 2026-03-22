@@ -7,6 +7,8 @@ import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useI18n } from "@/components/i18n/I18nProvider";
+import { Alert } from "@/components/ui/Alert";
+import { Button } from "@/components/ui/Button";
 import { useSignUpMutation } from "@/hooks/use-signup-mutation";
 import { signUpInputSchema, type SignUpInput } from "@/lib/auth/schemas";
 
@@ -145,9 +147,9 @@ export function SignUpPageClient() {
                       className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 outline-hidden ring-4 ring-[#465fff]/10 transition focus:border-[#465fff]"
                     />
                     {errors.name ? (
-                      <p className="mt-1 text-xs text-red-600">
+                      <Alert variant="error" size="sm" className="mt-1">
                         {errors.name.message}
-                      </p>
+                      </Alert>
                     ) : null}
                   </div>
 
@@ -167,9 +169,9 @@ export function SignUpPageClient() {
                       className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 outline-hidden ring-4 ring-[#465fff]/10 transition focus:border-[#465fff]"
                     />
                     {errors.email ? (
-                      <p className="mt-1 text-xs text-red-600">
+                      <Alert variant="error" size="sm" className="mt-1">
                         {errors.email.message}
-                      </p>
+                      </Alert>
                     ) : null}
                   </div>
 
@@ -188,10 +190,11 @@ export function SignUpPageClient() {
                       placeholder={t("signup.passwordPlaceholder")}
                       className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 pr-11 text-sm text-gray-800 placeholder:text-gray-400 outline-hidden ring-4 ring-[#465fff]/10 transition focus:border-[#465fff]"
                     />
-                    <button
-                      type="button"
+                    <Button
                       onClick={() => setShowPassword((prev) => !prev)}
-                      className="absolute right-3 top-[34px] inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 transition hover:bg-gray-100 hover:text-gray-700"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-3 top-[34px] h-8 w-8 px-0 text-gray-500 hover:text-gray-700"
                       aria-label={showPassword ? "Hide password" : "Show password"}
                     >
                       {showPassword ? (
@@ -229,11 +232,11 @@ export function SignUpPageClient() {
                           />
                         </svg>
                       )}
-                    </button>
+                    </Button>
                     {errors.password ? (
-                      <p className="mt-1 text-xs text-red-600">
+                      <Alert variant="error" size="sm" className="mt-1">
                         {errors.password.message}
-                      </p>
+                      </Alert>
                     ) : null}
 
                     <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
@@ -285,26 +288,28 @@ export function SignUpPageClient() {
                       className="h-11 w-full rounded-lg border border-gray-300 bg-transparent px-4 py-2.5 text-sm text-gray-800 placeholder:text-gray-400 outline-hidden ring-4 ring-[#465fff]/10 transition focus:border-[#465fff]"
                     />
                     {errors.confirmPassword ? (
-                      <p className="mt-1 text-xs text-red-600">
+                      <Alert variant="error" size="sm" className="mt-1">
                         {errors.confirmPassword.message}
-                      </p>
+                      </Alert>
                     ) : null}
                   </div>
 
                   {signUpMutation.error ? (
-                    <p className="text-sm text-red-600">
+                    <Alert variant="error">
                       {signUpMutation.error.message}
-                    </p>
+                    </Alert>
                   ) : null}
 
                   <div>
-                    <button
-                      className="flex h-11 w-full items-center justify-center rounded-lg bg-[#465fff] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#364ed9] disabled:cursor-not-allowed disabled:opacity-70"
+                    <Button
+                      fullWidth
+                      size="lg"
+                      loading={signUpMutation.isPending}
+                      loadingLabel={`${t("signup.submit")}...`}
                       type="submit"
-                      disabled={signUpMutation.isPending}
                     >
-                      {signUpMutation.isPending ? `${t("signup.submit")}...` : t("signup.submit")}
-                    </button>
+                      {t("signup.submit")}
+                    </Button>
                   </div>
                 </div>
               </form>

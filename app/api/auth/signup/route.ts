@@ -1,6 +1,7 @@
 import { hash } from "bcryptjs";
 import { NextResponse } from "next/server";
 import { MASTER_ROLE_NAME } from "@/lib/auth/constants";
+import { setActiveTenantCookie } from "@/lib/auth/active-tenant";
 import { existsUserWithMaxLevelRole } from "@/lib/auth/bootstrap";
 import {
   signUpErrorResponseSchema,
@@ -183,13 +184,17 @@ export async function POST(request: Request) {
       },
     });
 
-    return user;
+    return {
+      ...user,
+      tenantId: tenant.id,
+    };
   });
 
   await setSessionCookie({
     userId: createdUser.id,
     email: createdUser.email,
   });
+  await setActiveTenantCookie(createdUser.tenantId);
 
   const response = signUpSuccessResponseSchema.parse({
     success: true,

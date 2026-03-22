@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useI18n } from "@/components/i18n/I18nProvider";
+import { Button } from "@/components/ui/Button";
 
 export default function SignInPage() {
   const { t } = useI18n();
@@ -132,12 +133,9 @@ export default function SignInPage() {
                   </div>
 
                   <div>
-                    <button
-                      className="flex h-11 w-full items-center justify-center rounded-lg bg-[#465fff] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#364ed9]"
-                      type="button"
-                    >
+                    <Button fullWidth size="lg">
                       {t("signin.submit")}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </form>

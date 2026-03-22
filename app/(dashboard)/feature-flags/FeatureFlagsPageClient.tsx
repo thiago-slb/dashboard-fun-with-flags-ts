@@ -3,6 +3,14 @@
 import { useMemo, useState } from "react";
 import { Header } from "@/components/dashboard/Header";
 import { SideMenu } from "@/components/dashboard/SideMenu";
+import { Alert } from "@/components/ui/Alert";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { H1 } from "@/components/ui/H1";
+import { H2 } from "@/components/ui/H2";
+import { Subtitle } from "@/components/ui/Subtitle";
+import { Table, Tbody, Th, Thead, Tr } from "@/components/ui/Table";
 import {
   getPatchForInlineEdit,
   useCreateFeatureFlagMutation,
@@ -112,8 +120,10 @@ export function FeatureFlagsPageClient({
       <SideMenu isOpen={sidebarOpen} />
 
       {sidebarOpen ? (
-        <button
+        <Button
           type="button"
+          variant="unstyled"
+          size="none"
           aria-label="Close sidebar overlay"
           className="fixed inset-0 z-30 bg-gray-900/50 xl:hidden"
           onClick={() => setSidebarOpen(false)}
@@ -130,31 +140,25 @@ export function FeatureFlagsPageClient({
         <main className="p-5 sm:p-7">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+              <H1>
                 Feature Flags
-              </h1>
-              <p className="mt-1 text-sm text-slate-600">
+              </H1>
+              <Subtitle>
                 Create, edit and control runtime flags.
-              </p>
+              </Subtitle>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2 text-sm">
-              <span className="rounded-lg bg-slate-100 px-3 py-1.5 text-slate-700">
-                Total: {summary.total}
-              </span>
-              <span className="rounded-lg bg-emerald-100 px-3 py-1.5 text-emerald-700">
-                Enabled: {summary.enabled}
-              </span>
-              <span className="rounded-lg bg-slate-200 px-3 py-1.5 text-slate-700">
-                Disabled: {summary.disabled}
-              </span>
-              <button
+              <Badge variant="neutral">Total: {summary.total}</Badge>
+              <Badge variant="success">Enabled: {summary.enabled}</Badge>
+              <Badge variant="neutral">Disabled: {summary.disabled}</Badge>
+              <Button
                 type="button"
                 onClick={() => setCreateModalOpen(true)}
                 disabled={environments.length === 0}
                 className="h-9 rounded-lg bg-[#465fff] px-4 text-sm font-medium text-white hover:bg-[#364ed9] disabled:opacity-70"
               >
                 Create Flag
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -164,33 +168,33 @@ export function FeatureFlagsPageClient({
             </p>
           ) : null}
 
-          <section className="mt-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.06)]">
-            <h2 className="text-base font-semibold text-slate-900">Flags catalog</h2>
+          <Card className="mt-5">
+            <H2>Flags catalog</H2>
 
             {featureFlagsQuery.isLoading ? (
               <p className="mt-4 text-sm text-slate-500">Loading flags...</p>
             ) : featureFlagsQuery.error ? (
-              <p className="mt-4 text-sm text-red-600">
+              <Alert variant="error" className="mt-4">
                 {(featureFlagsQuery.error as Error).message}
-              </p>
+              </Alert>
             ) : (
               <div className="mt-4 overflow-x-auto">
-                <table className="w-full min-w-[780px] text-left text-sm">
-                  <thead>
-                    <tr className="text-xs uppercase tracking-wide text-slate-500">
-                      <th className="pb-3">Environment</th>
-                      <th className="pb-3">Key</th>
-                      <th className="pb-3">Name</th>
-                      <th className="pb-3">Rollout</th>
-                      <th className="pb-3">State</th>
-                      <th className="pb-3">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-slate-700">
+                <Table className="w-full min-w-[780px] text-left text-sm">
+                  <Thead>
+                    <Tr className="text-xs uppercase tracking-wide text-slate-500">
+                      <Th className="pb-3">Environment</Th>
+                      <Th className="pb-3">Key</Th>
+                      <Th className="pb-3">Name</Th>
+                      <Th className="pb-3">Rollout</Th>
+                      <Th className="pb-3">State</Th>
+                      <Th className="pb-3">Actions</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody className="text-slate-700">
                     {flags.map((flag) => {
                       const isEditing = editingId === flag.id;
                       return (
-                        <tr key={flag.id} className="border-t border-slate-100">
+                        <Tr key={flag.id} className="border-t border-slate-100">
                           <td className="py-3">
                             {isEditing ? (
                               <select
@@ -267,7 +271,7 @@ export function FeatureFlagsPageClient({
                             )}
                           </td>
                           <td className="py-3">
-                            <button
+                            <Button
                               type="button"
                               onClick={() =>
                                 updateMutation.mutate({
@@ -276,75 +280,74 @@ export function FeatureFlagsPageClient({
                                 })
                               }
                               disabled={loadingAny}
-                              className={`rounded-lg px-3 py-1.5 text-xs font-medium ${
-                                flag.enabled
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : "bg-slate-200 text-slate-700"
-                              }`}
+                              variant="ghost"
+                              size="none"
                             >
-                              {flag.enabled ? "Enabled" : "Disabled"}
-                            </button>
+                              <Badge variant={flag.enabled ? "success" : "neutral"} dot>
+                                {flag.enabled ? "Enabled" : "Disabled"}
+                              </Badge>
+                            </Button>
                           </td>
                           <td className="py-3">
                             <div className="flex items-center gap-2">
                               {isEditing ? (
                                 <>
-                                  <button
+                                  <Button
                                     type="button"
                                     onClick={() => handleSaveEdit(flag)}
                                     className="rounded-lg bg-[#465fff] px-3 py-1.5 text-xs font-medium text-white"
                                   >
                                     Save
-                                  </button>
-                                  <button
+                                  </Button>
+                                  <Button
                                     type="button"
                                     onClick={() => setEditingId(null)}
                                     className="rounded-lg bg-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700"
                                   >
                                     Cancel
-                                  </button>
+                                  </Button>
                                 </>
                               ) : (
                                 <>
-                                  <button
+                                  <Button
                                     type="button"
                                     onClick={() => startEdit(flag)}
                                     className="rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-medium text-blue-700"
                                   >
                                     Edit
-                                  </button>
-                                  <button
+                                  </Button>
+                                  <Button
                                     type="button"
                                     onClick={() => deleteMutation.mutate(flag.id)}
                                     className="rounded-lg bg-red-100 px-3 py-1.5 text-xs font-medium text-red-700"
                                   >
                                     Delete
-                                  </button>
+                                  </Button>
                                 </>
                               )}
                             </div>
                           </td>
-                        </tr>
+                        </Tr>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </Tbody>
+                </Table>
               </div>
             )}
-          </section>
+          </Card>
 
           {createModalOpen ? (
             <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 p-4">
               <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
                 <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold text-slate-900">Create flag</h2>
-                  <button
+                  <H2 className="text-lg">Create flag</H2>
+                  <Button
                     type="button"
                     onClick={() => setCreateModalOpen(false)}
                     className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700"
                   >
                     Close
-                  </button>
+                  </Button>
                 </div>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -422,18 +425,20 @@ export function FeatureFlagsPageClient({
                 </div>
 
                 {createMutation.error ? (
-                  <p className="mt-3 text-sm text-red-600">{createMutation.error.message}</p>
+                  <Alert variant="error" className="mt-3">
+                    {createMutation.error.message}
+                  </Alert>
                 ) : null}
 
                 <div className="mt-4 flex justify-end gap-2">
-                  <button
+                  <Button
                     type="button"
                     onClick={() => setCreateModalOpen(false)}
                     className="h-10 rounded-lg bg-slate-100 px-4 text-sm font-medium text-slate-700"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
                     onClick={handleCreate}
                     disabled={
@@ -444,7 +449,7 @@ export function FeatureFlagsPageClient({
                     className="h-10 rounded-lg bg-[#465fff] px-4 text-sm font-medium text-white hover:bg-[#364ed9] disabled:opacity-70"
                   >
                     {createMutation.isPending ? "Creating..." : "Create"}
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
