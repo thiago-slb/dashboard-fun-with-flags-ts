@@ -22,6 +22,7 @@ import {
 } from "@/hooks/use-feature-flags";
 import { useEnvironmentsQuery } from "@/hooks/use-environments";
 import type { FeatureFlagItem } from "@/lib/feature-flags/schemas";
+import { useI18n } from "@/components/i18n/I18nProvider";
 
 type FeatureFlagsPageClientProps = {
   userName: string;
@@ -39,6 +40,7 @@ const defaultForm: FeatureFlagFormValue = {
 };
 
 export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPageClientProps) {
+  const { t } = useI18n();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -189,13 +191,13 @@ export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPage
         <main className="p-5 sm:p-7">
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <H1>Feature Flags</H1>
-              <Subtitle>Create, edit and control runtime flags.</Subtitle>
+              <H1>{t("featureFlags.title")}</H1>
+              <Subtitle>{t("featureFlags.subtitle")}</Subtitle>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2 text-sm">
-              <Badge variant="neutral">Total: {summary.total}</Badge>
-              <Badge variant="success">Enabled: {summary.enabled}</Badge>
-              <Badge variant="neutral">Disabled: {summary.disabled}</Badge>
+              <Badge variant="neutral">{t("featureFlags.total")}: {summary.total}</Badge>
+              <Badge variant="success">{t("featureFlags.enabled")}: {summary.enabled}</Badge>
+              <Badge variant="neutral">{t("featureFlags.disabled")}: {summary.disabled}</Badge>
               <Button
                 type="button"
                 onClick={() => setCreateModalOpen(true)}
@@ -206,27 +208,27 @@ export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPage
                   </svg>
                 )}
               >
-                Create Flag
+                {t("featureFlags.createButton")}
               </Button>
             </div>
           </div>
 
           {environments.length === 0 ? (
             <Alert variant="warning" className="mb-5">
-              You need at least one environment before creating a feature flag.
+              {t("featureFlags.needEnvironment")}
             </Alert>
           ) : null}
 
           <Card className="mt-5">
             <div className="flex flex-wrap items-end justify-between gap-3">
-              <H2>Flags catalog</H2>
+              <H2>{t("featureFlags.listTitle")}</H2>
               <div className="relative w-full max-w-md">
                 <input
                   type="text"
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
-                  placeholder="Search by key, name, description or environment..."
-                  aria-label="Search feature flags"
+                  placeholder={t("featureFlags.searchPlaceholder")}
+                  aria-label={t("featureFlags.searchAria")}
                   className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 pr-10 text-sm outline-none focus:border-[#465fff]"
                 />
                 {searchInput ? (
@@ -235,7 +237,7 @@ export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPage
                     variant="ghost"
                     size="icon"
                     onClick={() => setSearchInput("")}
-                    aria-label="Clear search"
+                    aria-label={t("featureFlags.clearSearch")}
                     className="absolute right-1 top-1 h-8 w-8 rounded-md text-slate-500 hover:bg-slate-100"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -251,12 +253,12 @@ export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPage
                 <Table className="w-full min-w-[860px] text-left text-sm">
                   <Thead>
                     <Tr className="text-xs uppercase tracking-wide text-slate-500">
-                      <Th className="pb-3">Environment</Th>
-                      <Th className="pb-3">Key</Th>
-                      <Th className="pb-3">Name</Th>
-                      <Th className="pb-3">Rollout</Th>
-                      <Th className="pb-3">State</Th>
-                      <Th className="pb-3">Actions</Th>
+                      <Th className="pb-3">{t("featureFlags.tableEnvironment")}</Th>
+                      <Th className="pb-3">{t("featureFlags.tableKey")}</Th>
+                      <Th className="pb-3">{t("featureFlags.tableName")}</Th>
+                      <Th className="pb-3">{t("featureFlags.tableRollout")}</Th>
+                      <Th className="pb-3">{t("featureFlags.tableState")}</Th>
+                      <Th className="pb-3">{t("featureFlags.tableActions")}</Th>
                     </Tr>
                   </Thead>
                   <Tbody className="text-slate-700">
@@ -283,18 +285,18 @@ export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPage
                 {(featureFlagsQuery.error as Error).message}
               </Alert>
             ) : flags.length === 0 ? (
-              <p className="mt-4 text-sm text-slate-500">No feature flags found.</p>
+              <p className="mt-4 text-sm text-slate-500">{t("featureFlags.empty")}</p>
             ) : (
               <div className="mt-4 overflow-x-auto">
                 <Table className="w-full min-w-[860px] text-left text-sm">
                   <Thead>
                     <Tr className="text-xs uppercase tracking-wide text-slate-500">
-                      <Th className="pb-3">Environment</Th>
-                      <Th className="pb-3">Key</Th>
-                      <Th className="pb-3">Name</Th>
-                      <Th className="pb-3">Rollout</Th>
-                      <Th className="pb-3">State</Th>
-                      <Th className="pb-3">Actions</Th>
+                      <Th className="pb-3">{t("featureFlags.tableEnvironment")}</Th>
+                      <Th className="pb-3">{t("featureFlags.tableKey")}</Th>
+                      <Th className="pb-3">{t("featureFlags.tableName")}</Th>
+                      <Th className="pb-3">{t("featureFlags.tableRollout")}</Th>
+                      <Th className="pb-3">{t("featureFlags.tableState")}</Th>
+                      <Th className="pb-3">{t("featureFlags.tableActions")}</Th>
                     </Tr>
                   </Thead>
                   <Tbody className="text-slate-700">
@@ -314,7 +316,7 @@ export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPage
                             size="none"
                           >
                             <Badge variant={flag.enabled ? "success" : "neutral"} dot>
-                              {flag.enabled ? "Enabled" : "Disabled"}
+                              {flag.enabled ? t("featureFlags.stateEnabled") : t("featureFlags.stateDisabled")}
                             </Badge>
                           </Button>
                         </td>
@@ -331,7 +333,7 @@ export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPage
                                 </svg>
                               )}
                             >
-                              Edit
+                              {t("featureFlags.edit")}
                             </Button>
                             <Button
                               type="button"
@@ -347,7 +349,7 @@ export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPage
                                 </svg>
                               )}
                             >
-                              Delete
+                              {t("featureFlags.delete")}
                             </Button>
                           </div>
                         </td>
@@ -360,6 +362,7 @@ export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPage
                   <div className="mt-3 flex items-center gap-2">
                     <Skeleton className="h-4 w-32" />
                     <Skeleton className="h-4 w-24" />
+                    <span className="text-xs text-slate-500">{t("featureFlags.loadingMore")}</span>
                   </div>
                 ) : null}
               </div>
@@ -370,14 +373,14 @@ export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPage
             <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 p-4">
               <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
                 <div className="flex items-center justify-between gap-3">
-                  <H2 className="text-lg">Create flag</H2>
+                  <H2 className="text-lg">{t("featureFlags.createModalTitle")}</H2>
                   <Button
                     type="button"
                     onClick={() => setCreateModalOpen(false)}
                     variant="secondary"
                     className="bg-gray-200 text-black hover:bg-gray-300"
                   >
-                    Close
+                    {t("featureFlags.close")}
                   </Button>
                 </div>
 
@@ -401,13 +404,13 @@ export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPage
                     variant="secondary"
                     className="bg-gray-200 text-black hover:bg-gray-300"
                   >
-                    Cancel
+                    {t("featureFlags.cancel")}
                   </Button>
                   <Button
                     type="button"
                     onClick={handleCreate}
                     loading={createMutation.isPending}
-                    loadingLabel="Creating..."
+                    loadingLabel={t("featureFlags.creating")}
                     disabled={environments.length === 0 || !createForm.environmentId}
                     leftIcon={(
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -415,7 +418,7 @@ export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPage
                       </svg>
                     )}
                   >
-                    Create
+                    {t("featureFlags.create")}
                   </Button>
                 </div>
               </div>
@@ -426,7 +429,7 @@ export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPage
             <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 p-4">
               <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
                 <div className="flex items-center justify-between gap-3">
-                  <H2 className="text-lg">Edit flag</H2>
+                  <H2 className="text-lg">{t("featureFlags.editModalTitle")}</H2>
                   <Button
                     type="button"
                     onClick={() => {
@@ -436,7 +439,7 @@ export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPage
                     variant="secondary"
                     className="bg-gray-200 text-black hover:bg-gray-300"
                   >
-                    Close
+                    {t("featureFlags.close")}
                   </Button>
                 </div>
 
@@ -464,13 +467,13 @@ export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPage
                     variant="secondary"
                     className="bg-gray-200 text-black hover:bg-gray-300"
                   >
-                    Cancel
+                    {t("featureFlags.cancel")}
                   </Button>
                   <Button
                     type="button"
                     onClick={handleSaveEdit}
                     loading={updateMutation.isPending}
-                    loadingLabel="Saving..."
+                    loadingLabel={t("featureFlags.saving")}
                     disabled={!editingId || !editForm.environmentId}
                     leftIcon={(
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -478,7 +481,7 @@ export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPage
                       </svg>
                     )}
                   >
-                    Save
+                    {t("featureFlags.save")}
                   </Button>
                 </div>
               </div>
@@ -487,10 +490,10 @@ export function FeatureFlagsPageClient({ userName, userEmail }: FeatureFlagsPage
 
           <ConfirmDialog
             isOpen={confirmDeleteOpen}
-            title="Delete feature flag?"
-            description="The flag will be archived (soft delete) and disabled."
-            confirmLabel="Delete"
-            cancelLabel="Cancel"
+            title={t("featureFlags.deleteConfirmTitle")}
+            description={t("featureFlags.deleteConfirmDescription")}
+            confirmLabel={t("featureFlags.delete")}
+            cancelLabel={t("featureFlags.cancel")}
             isPending={deleteMutation.isPending}
             onCancel={() => {
               setConfirmDeleteOpen(false);

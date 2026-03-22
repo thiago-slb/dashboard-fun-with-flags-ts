@@ -1,6 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { z } from "zod";
 import {
   createFeatureFlagInputSchema,
   deleteFeatureFlagResponseSchema,
@@ -24,6 +25,25 @@ async function parseJson(response: Response) {
 function getErrorMessage(payload: unknown, fallback: string) {
   const parsed = featureFlagErrorResponseSchema.safeParse(payload);
   return parsed.success ? parsed.data.error.message : fallback;
+}
+
+function formatFieldName(path: PropertyKey[]) {
+  if (path.length === 0) {
+    return "Field";
+  }
+  const key = String(path[path.length - 1] ?? "field");
+  return key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^\w/, (char) => char.toUpperCase());
+}
+
+function formatZodValidationError(error: z.ZodError) {
+  return error.issues
+    .map((issue) => `${formatFieldName(issue.path)}: ${issue.message}`)
+    .join("\n");
 }
 
 export function useFeatureFlagsQuery() {
@@ -88,7 +108,12 @@ export function useCreateFeatureFlagMutation() {
 
   return useMutation({
     mutationFn: async (input: CreateFeatureFlagInput) => {
-      const validInput = createFeatureFlagInputSchema.parse(input);
+      const parsedInput = createFeatureFlagInputSchema.safeParse(input);
+      if (!parsedInput.success) {
+        throw new Error(formatZodValidationError(parsedInput.error));
+      }
+
+      const validInput = parsedInput.data;
       const response = await fetch("/api/feature-flags", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -124,7 +149,12 @@ export function useUpdateFeatureFlagMutation() {
 
   return useMutation({
     mutationFn: async ({ id, data }: UpdatePayload) => {
-      const validInput = updateFeatureFlagInputSchema.parse(data);
+      const parsedInput = updateFeatureFlagInputSchema.safeParse(data);
+      if (!parsedInput.success) {
+        throw new Error(formatZodValidationError(parsedInput.error));
+      }
+
+      const validInput = parsedInput.data;
       const response = await fetch(`/api/feature-flags/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

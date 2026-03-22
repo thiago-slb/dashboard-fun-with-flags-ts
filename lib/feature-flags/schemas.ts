@@ -47,7 +47,7 @@ export const createFeatureFlagInputSchema = z.object({
   allowListEmails: z.array(z.string().trim().email("Invalid allow-list email.")).max(200).optional(),
   enabled: z.boolean().default(false),
   rolloutPercent: z.number().int().min(0).max(100).default(0),
-});
+}).strict();
 
 export const updateFeatureFlagInputSchema = z
   .object({
@@ -64,6 +64,7 @@ export const updateFeatureFlagInputSchema = z
     enabled: z.boolean().optional(),
     rolloutPercent: z.number().int().min(0).max(100).optional(),
   })
+  .strict()
   .refine((payload) => Object.keys(payload).length > 0, {
     message: "At least one field must be provided.",
   });

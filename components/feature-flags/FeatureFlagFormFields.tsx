@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useI18n } from "@/components/i18n/I18nProvider";
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
@@ -37,6 +38,7 @@ export function FeatureFlagFormFields({
   disabled = false,
   prefix,
 }: FeatureFlagFormFieldsProps) {
+  const { t } = useI18n();
   const [emailDraft, setEmailDraft] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
 
@@ -47,11 +49,11 @@ export function FeatureFlagFormFields({
     }
     const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
     if (!isValid) {
-      setEmailError("Invalid email format.");
+      setEmailError(t("featureFlags.allowListInvalidEmail"));
       return;
     }
     if (value.allowListEmails.includes(normalized)) {
-      setEmailError("Email already added.");
+      setEmailError(t("featureFlags.allowListDuplicateEmail"));
       return;
     }
 
@@ -72,63 +74,63 @@ export function FeatureFlagFormFields({
 
   return (
     <div className="mt-4 grid gap-3 md:grid-cols-2">
-      <FormField label="Environment" htmlFor={`${prefix}-feature-flag-environment`} className="mt-0">
+      <FormField label={t("featureFlags.environmentLabel")} htmlFor={`${prefix}-feature-flag-environment`} className="mt-0">
         <Select
           id={`${prefix}-feature-flag-environment`}
           value={value.environmentId}
           onChange={(event) => onChange({ ...value, environmentId: event.target.value })}
           disabled={disabled}
           searchable
-          searchPlaceholder="Search environments..."
+          searchPlaceholder={t("featureFlags.environmentSearchPlaceholder")}
           options={[
-            { value: "", label: "Select environment" },
+            { value: "", label: t("featureFlags.environmentPlaceholder") },
             ...environments.map((environment) => ({
               value: environment.id,
               label: `${environment.name} (${environment.key})`,
             })),
           ]}
         >
-          <SelectOption value="">Select environment</SelectOption>
+          <SelectOption value="">{t("featureFlags.environmentPlaceholder")}</SelectOption>
         </Select>
       </FormField>
 
-      <FormField label="Key" htmlFor={`${prefix}-feature-flag-key`} className="mt-0">
+      <FormField label={t("featureFlags.keyLabel")} htmlFor={`${prefix}-feature-flag-key`} className="mt-0">
         <input
           id={`${prefix}-feature-flag-key`}
           type="text"
           value={value.key}
           onChange={(event) => onChange({ ...value, key: event.target.value })}
           disabled={disabled}
-          placeholder="key (ex: checkout_v2)"
+          placeholder={t("featureFlags.keyPlaceholder")}
           className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
         />
       </FormField>
 
-      <FormField label="Name" htmlFor={`${prefix}-feature-flag-name`} className="mt-0">
+      <FormField label={t("featureFlags.nameLabel")} htmlFor={`${prefix}-feature-flag-name`} className="mt-0">
         <input
           id={`${prefix}-feature-flag-name`}
           type="text"
           value={value.name}
           onChange={(event) => onChange({ ...value, name: event.target.value })}
           disabled={disabled}
-          placeholder="Name"
+          placeholder={t("featureFlags.namePlaceholder")}
           className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
         />
       </FormField>
 
-      <FormField label="Description" htmlFor={`${prefix}-feature-flag-description`} className="mt-0">
+      <FormField label={t("featureFlags.descriptionLabel")} htmlFor={`${prefix}-feature-flag-description`} className="mt-0">
         <input
           id={`${prefix}-feature-flag-description`}
           type="text"
           value={value.description}
           onChange={(event) => onChange({ ...value, description: event.target.value })}
           disabled={disabled}
-          placeholder="Description"
+          placeholder={t("featureFlags.descriptionPlaceholder")}
           className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
         />
       </FormField>
 
-      <FormField label="Rollout (%)" htmlFor={`${prefix}-feature-flag-rollout`} className="mt-0">
+      <FormField label={t("featureFlags.rolloutLabel")} htmlFor={`${prefix}-feature-flag-rollout`} className="mt-0">
         <input
           id={`${prefix}-feature-flag-rollout`}
           type="number"
@@ -139,12 +141,12 @@ export function FeatureFlagFormFields({
             onChange({ ...value, rolloutPercent: Number(event.target.value) })
           }
           disabled={disabled}
-          placeholder="0-100"
+          placeholder={t("featureFlags.rolloutPlaceholder")}
           className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
         />
       </FormField>
 
-      <FormField label="Status" htmlFor={`${prefix}-feature-flag-enabled`} className="mt-0">
+      <FormField label={t("featureFlags.statusLabel")} htmlFor={`${prefix}-feature-flag-enabled`} className="mt-0">
         <Select
           id={`${prefix}-feature-flag-enabled`}
           value={value.enabled}
@@ -156,13 +158,13 @@ export function FeatureFlagFormFields({
           }
           disabled={disabled}
         >
-          <SelectOption value="enabled">Enabled</SelectOption>
-          <SelectOption value="disabled">Disabled</SelectOption>
+          <SelectOption value="enabled">{t("featureFlags.optionEnabled")}</SelectOption>
+          <SelectOption value="disabled">{t("featureFlags.optionDisabled")}</SelectOption>
         </Select>
       </FormField>
 
       <div className="md:col-span-2">
-        <FormField label="Allow List Emails" htmlFor={`${prefix}-feature-flag-allow-list`} className="mt-0">
+        <FormField label={t("featureFlags.allowListLabel")} htmlFor={`${prefix}-feature-flag-allow-list`} className="mt-0">
           <div className="flex flex-wrap items-center gap-2">
             <input
               id={`${prefix}-feature-flag-allow-list`}
@@ -175,7 +177,7 @@ export function FeatureFlagFormFields({
                 }
               }}
               disabled={disabled}
-              placeholder="user@example.com"
+              placeholder={t("featureFlags.allowListPlaceholder")}
               className="h-10 min-w-[240px] flex-1 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
             />
             <Button
@@ -190,7 +192,7 @@ export function FeatureFlagFormFields({
                 </svg>
               )}
             >
-              Add Email
+              {t("featureFlags.addAllowEmail")}
             </Button>
           </div>
           {emailError ? (
@@ -210,7 +212,7 @@ export function FeatureFlagFormFields({
                     type="button"
                     onClick={() => removeAllowEmail(email)}
                     className="text-slate-500 hover:text-slate-800"
-                    aria-label={`Remove ${email}`}
+                    aria-label={`${t("featureFlags.removeAllowEmailAria")} ${email}`}
                     disabled={disabled}
                   >
                     ×
@@ -219,7 +221,7 @@ export function FeatureFlagFormFields({
               ))}
             </div>
           ) : (
-            <p className="mt-2 text-xs text-slate-500">No emails in allow list.</p>
+            <p className="mt-2 text-xs text-slate-500">{t("featureFlags.allowListEmpty")}</p>
           )}
         </FormField>
       </div>

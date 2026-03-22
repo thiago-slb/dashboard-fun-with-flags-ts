@@ -12,7 +12,11 @@ import {
 import {
   DEVELOPMENT_ENVIRONMENT_DESCRIPTION_BY_LOCALE,
   DEVELOPMENT_ENVIRONMENT_NAME_BY_LOCALE,
+  PRODUCTION_ENVIRONMENT_DESCRIPTION_BY_LOCALE,
+  PRODUCTION_ENVIRONMENT_NAME_BY_LOCALE,
   resolveLocaleFromAcceptLanguage,
+  STAGING_ENVIRONMENT_DESCRIPTION_BY_LOCALE,
+  STAGING_ENVIRONMENT_NAME_BY_LOCALE,
 } from "@/lib/environments/default-development";
 import { setSessionCookie } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
@@ -121,6 +125,26 @@ export async function POST(request: Request) {
         key: "development",
         name: DEVELOPMENT_ENVIRONMENT_NAME_BY_LOCALE[locale],
         description: DEVELOPMENT_ENVIRONMENT_DESCRIPTION_BY_LOCALE[locale],
+        createdByUserId: user.id,
+      },
+    });
+
+    await tx.environment.create({
+      data: {
+        tenantId: tenant.id,
+        key: "staging",
+        name: STAGING_ENVIRONMENT_NAME_BY_LOCALE[locale],
+        description: STAGING_ENVIRONMENT_DESCRIPTION_BY_LOCALE[locale],
+        createdByUserId: user.id,
+      },
+    });
+
+    await tx.environment.create({
+      data: {
+        tenantId: tenant.id,
+        key: "production",
+        name: PRODUCTION_ENVIRONMENT_NAME_BY_LOCALE[locale],
+        description: PRODUCTION_ENVIRONMENT_DESCRIPTION_BY_LOCALE[locale],
         createdByUserId: user.id,
       },
     });
