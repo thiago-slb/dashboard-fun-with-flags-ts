@@ -311,7 +311,7 @@ export function ProjectsPageClient({ userName, userEmail }: ProjectsPageClientPr
                                   setEditingProjectName(item.name);
                                   setEditModalOpen(true);
                                 }}
-                                variant="outline"
+                                variant="primary"
                                 size="sm"
                                 leftIcon={
                                   <svg

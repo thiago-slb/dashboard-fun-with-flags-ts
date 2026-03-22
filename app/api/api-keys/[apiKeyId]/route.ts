@@ -26,6 +26,11 @@ function toItem(apiKey: {
   name: string;
   keyPrefix: string;
   canReadFeatureFlags: boolean;
+  canWriteFeatureFlags: boolean;
+  canReadEnvironments: boolean;
+  canWriteEnvironments: boolean;
+  canReadProjects: boolean;
+  canWriteProjects: boolean;
   enabled: boolean;
   lastUsedAt: Date | null;
   createdAt: Date;
@@ -39,6 +44,11 @@ function toItem(apiKey: {
     name: apiKey.name,
     keyPrefix: apiKey.keyPrefix,
     canReadFeatureFlags: apiKey.canReadFeatureFlags,
+    canWriteFeatureFlags: apiKey.canWriteFeatureFlags,
+    canReadEnvironments: apiKey.canReadEnvironments,
+    canWriteEnvironments: apiKey.canWriteEnvironments,
+    canReadProjects: apiKey.canReadProjects,
+    canWriteProjects: apiKey.canWriteProjects,
     enabled: apiKey.enabled,
     lastUsedAt: apiKey.lastUsedAt ? apiKey.lastUsedAt.toISOString() : null,
     createdAt: apiKey.createdAt.toISOString(),
@@ -95,9 +105,29 @@ export async function PATCH(
     return jsonError(404, "NOT_FOUND", "API key not found.");
   }
 
+  const updateData = { ...parsedInput.data };
+  if (updateData.canWriteFeatureFlags === true) {
+    updateData.canReadFeatureFlags = true;
+  }
+  if (updateData.canReadFeatureFlags === false) {
+    updateData.canWriteFeatureFlags = false;
+  }
+  if (updateData.canWriteEnvironments === true) {
+    updateData.canReadEnvironments = true;
+  }
+  if (updateData.canReadEnvironments === false) {
+    updateData.canWriteEnvironments = false;
+  }
+  if (updateData.canWriteProjects === true) {
+    updateData.canReadProjects = true;
+  }
+  if (updateData.canReadProjects === false) {
+    updateData.canWriteProjects = false;
+  }
+
   const updated = await prisma.apiKey.update({
     where: { id: apiKeyId },
-    data: parsedInput.data,
+    data: updateData,
     select: {
       id: true,
       environmentId: true,
@@ -110,6 +140,11 @@ export async function PATCH(
       name: true,
       keyPrefix: true,
       canReadFeatureFlags: true,
+      canWriteFeatureFlags: true,
+      canReadEnvironments: true,
+      canWriteEnvironments: true,
+      canReadProjects: true,
+      canWriteProjects: true,
       enabled: true,
       lastUsedAt: true,
       createdAt: true,

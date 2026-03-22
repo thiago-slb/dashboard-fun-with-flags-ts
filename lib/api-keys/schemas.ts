@@ -1,5 +1,28 @@
 import { z } from "zod";
 
+const apiKeyPermissionsBaseSchema = z.object({
+  canReadFeatureFlags: z.boolean().default(true),
+  canWriteFeatureFlags: z.boolean().default(false),
+  canReadEnvironments: z.boolean().default(false),
+  canWriteEnvironments: z.boolean().default(false),
+  canReadProjects: z.boolean().default(false),
+  canWriteProjects: z.boolean().default(false),
+});
+
+export const apiKeyPermissionsSchema = apiKeyPermissionsBaseSchema
+  .refine((data) => !data.canWriteFeatureFlags || data.canReadFeatureFlags, {
+    message: "Feature flags write permission requires read permission.",
+    path: ["canWriteFeatureFlags"],
+  })
+  .refine((data) => !data.canWriteEnvironments || data.canReadEnvironments, {
+    message: "Environments write permission requires read permission.",
+    path: ["canWriteEnvironments"],
+  })
+  .refine((data) => !data.canWriteProjects || data.canReadProjects, {
+    message: "Projects write permission requires read permission.",
+    path: ["canWriteProjects"],
+  });
+
 export const apiKeyItemSchema = z.object({
   id: z.string(),
   environmentId: z.string(),
@@ -8,6 +31,11 @@ export const apiKeyItemSchema = z.object({
   name: z.string(),
   keyPrefix: z.string(),
   canReadFeatureFlags: z.boolean(),
+  canWriteFeatureFlags: z.boolean(),
+  canReadEnvironments: z.boolean(),
+  canWriteEnvironments: z.boolean(),
+  canReadProjects: z.boolean(),
+  canWriteProjects: z.boolean(),
   enabled: z.boolean(),
   lastUsedAt: z.string().nullable(),
   createdAt: z.string(),
@@ -26,8 +54,17 @@ export const createApiKeyInputSchema = z.object({
     .trim()
     .min(2, "Name must have at least 2 characters.")
     .max(120, "Name must have at most 120 characters."),
-  canReadFeatureFlags: z.boolean().default(true),
+  ...apiKeyPermissionsBaseSchema.shape,
   enabled: z.boolean().default(true),
+}).refine((data) => !data.canWriteFeatureFlags || data.canReadFeatureFlags, {
+  message: "Feature flags write permission requires read permission.",
+  path: ["canWriteFeatureFlags"],
+}).refine((data) => !data.canWriteEnvironments || data.canReadEnvironments, {
+  message: "Environments write permission requires read permission.",
+  path: ["canWriteEnvironments"],
+}).refine((data) => !data.canWriteProjects || data.canReadProjects, {
+  message: "Projects write permission requires read permission.",
+  path: ["canWriteProjects"],
 });
 
 export const updateApiKeyInputSchema = z
@@ -35,11 +72,46 @@ export const updateApiKeyInputSchema = z
     environmentId: z.string().min(1, "Environment is required.").optional(),
     name: createApiKeyInputSchema.shape.name.optional(),
     canReadFeatureFlags: z.boolean().optional(),
+    canWriteFeatureFlags: z.boolean().optional(),
+    canReadEnvironments: z.boolean().optional(),
+    canWriteEnvironments: z.boolean().optional(),
+    canReadProjects: z.boolean().optional(),
+    canWriteProjects: z.boolean().optional(),
     enabled: z.boolean().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "At least one field must be provided.",
-  });
+  })
+  .refine(
+    (data) =>
+      data.canWriteFeatureFlags === undefined ||
+      data.canWriteFeatureFlags === false ||
+      data.canReadFeatureFlags !== false,
+    {
+      message: "Feature flags write permission requires read permission.",
+      path: ["canWriteFeatureFlags"],
+    }
+  )
+  .refine(
+    (data) =>
+      data.canWriteEnvironments === undefined ||
+      data.canWriteEnvironments === false ||
+      data.canReadEnvironments !== false,
+    {
+      message: "Environments write permission requires read permission.",
+      path: ["canWriteEnvironments"],
+    }
+  )
+  .refine(
+    (data) =>
+      data.canWriteProjects === undefined ||
+      data.canWriteProjects === false ||
+      data.canReadProjects !== false,
+    {
+      message: "Projects write permission requires read permission.",
+      path: ["canWriteProjects"],
+    }
+  );
 
 export const createApiKeyResponseSchema = z.object({
   success: z.literal(true),

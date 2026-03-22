@@ -24,12 +24,34 @@ type ApiKeysPageClientProps = {
   userEmail: string;
 };
 
+type ApiKeyPermissionsForm = {
+  canReadFeatureFlags: boolean;
+  canWriteFeatureFlags: boolean;
+  canReadEnvironments: boolean;
+  canWriteEnvironments: boolean;
+  canReadProjects: boolean;
+  canWriteProjects: boolean;
+};
+
+const defaultPermissions: ApiKeyPermissionsForm = {
+  canReadFeatureFlags: true,
+  canWriteFeatureFlags: false,
+  canReadEnvironments: false,
+  canWriteEnvironments: false,
+  canReadProjects: false,
+  canWriteProjects: false,
+};
+
 export function ApiKeysPageClient({ userName, userEmail }: ApiKeysPageClientProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [permissionsModalOpen, setPermissionsModalOpen] = useState(false);
+  const [editingPermissionsKeyId, setEditingPermissionsKeyId] = useState<string | null>(null);
   const [environmentId, setEnvironmentId] = useState("");
   const [name, setName] = useState("");
-  const [canReadFeatureFlags, setCanReadFeatureFlags] = useState(true);
+  const [permissions, setPermissions] = useState<ApiKeyPermissionsForm>(defaultPermissions);
+  const [editingPermissions, setEditingPermissions] =
+    useState<ApiKeyPermissionsForm>(defaultPermissions);
   const [enabled, setEnabled] = useState(true);
   const [revealedApiKey, setRevealedApiKey] = useState<string | null>(null);
 
@@ -39,19 +61,63 @@ export function ApiKeysPageClient({ userName, userEmail }: ApiKeysPageClientProp
   const updateMutation = useUpdateApiKeyMutation();
   const deleteMutation = useDeleteApiKeyMutation();
 
+  function updatePermissionsState(
+    prev: ApiKeyPermissionsForm,
+    key: keyof ApiKeyPermissionsForm,
+    checked: boolean,
+  ) {
+    const next = { ...prev, [key]: checked };
+
+    if (key === "canReadFeatureFlags" && !checked) {
+      next.canWriteFeatureFlags = false;
+    }
+    if (key === "canWriteFeatureFlags" && checked) {
+      next.canReadFeatureFlags = true;
+    }
+    if (key === "canReadEnvironments" && !checked) {
+      next.canWriteEnvironments = false;
+    }
+    if (key === "canWriteEnvironments" && checked) {
+      next.canReadEnvironments = true;
+    }
+    if (key === "canReadProjects" && !checked) {
+      next.canWriteProjects = false;
+    }
+    if (key === "canWriteProjects" && checked) {
+      next.canReadProjects = true;
+    }
+
+    return next;
+  }
+
   async function handleCreate() {
     const created = await createMutation.mutateAsync({
       environmentId,
       name,
-      canReadFeatureFlags,
+      ...permissions,
       enabled,
     });
     setEnvironmentId("");
     setName("");
-    setCanReadFeatureFlags(true);
+    setPermissions(defaultPermissions);
     setEnabled(true);
     setRevealedApiKey(created.apiKey);
     setCreateModalOpen(false);
+  }
+
+  async function handleSavePermissions() {
+    if (!editingPermissionsKeyId) {
+      return;
+    }
+
+    await updateMutation.mutateAsync({
+      id: editingPermissionsKeyId,
+      data: editingPermissions,
+    });
+
+    setPermissionsModalOpen(false);
+    setEditingPermissionsKeyId(null);
+    setEditingPermissions(defaultPermissions);
   }
 
   return (
@@ -146,28 +212,39 @@ export function ApiKeysPageClient({ userName, userEmail }: ApiKeysPageClientProp
                         <td className="py-3">{item.name}</td>
                         <td className="py-3 font-mono text-xs">{item.keyPrefix}...</td>
                         <td className="py-3">
-                          {item.canReadFeatureFlags ? (
-                            <Badge variant="info">read:feature_flags</Badge>
-                          ) : (
-                            <Badge variant="neutral">none</Badge>
-                          )}
+                          <div className="flex flex-wrap items-center gap-1">
+                            {item.canReadFeatureFlags ? (
+                              <Badge variant="info">feature_flags:read</Badge>
+                            ) : null}
+                            {item.canWriteFeatureFlags ? (
+                              <Badge variant="success">feature_flags:write</Badge>
+                            ) : null}
+                            {item.canReadEnvironments ? (
+                              <Badge variant="info">environments:read</Badge>
+                            ) : null}
+                            {item.canWriteEnvironments ? (
+                              <Badge variant="success">environments:write</Badge>
+                            ) : null}
+                            {item.canReadProjects ? (
+                              <Badge variant="info">projects:read</Badge>
+                            ) : null}
+                            {item.canWriteProjects ? (
+                              <Badge variant="success">projects:write</Badge>
+                            ) : null}
+                            {!item.canReadFeatureFlags &&
+                            !item.canWriteFeatureFlags &&
+                            !item.canReadEnvironments &&
+                            !item.canWriteEnvironments &&
+                            !item.canReadProjects &&
+                            !item.canWriteProjects ? (
+                              <Badge variant="neutral">none</Badge>
+                            ) : null}
+                          </div>
                         </td>
                         <td className="py-3">
-                          <Button
-                            type="button"
-                            onClick={() =>
-                              updateMutation.mutate({
-                                id: item.id,
-                                data: { enabled: !item.enabled },
-                              })
-                            }
-                            variant="ghost"
-                            size="none"
-                          >
-                            <Badge variant={item.enabled ? "success" : "neutral"} dot>
-                              {item.enabled ? "Enabled" : "Disabled"}
-                            </Badge>
-                          </Button>
+                          <Badge variant={item.enabled ? "success" : "neutral"} dot>
+                            {item.enabled ? "Enabled" : "Disabled"}
+                          </Badge>
                         </td>
                         <td className="py-3">
                           <div className="flex items-center gap-2">
@@ -176,14 +253,30 @@ export function ApiKeysPageClient({ userName, userEmail }: ApiKeysPageClientProp
                               onClick={() =>
                                 updateMutation.mutate({
                                   id: item.id,
-                                  data: {
-                                    canReadFeatureFlags: !item.canReadFeatureFlags,
-                                  },
+                                  data: { enabled: !item.enabled },
                                 })
                               }
+                              className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700"
+                            >
+                              {item.enabled ? "Disable" : "Enable"}
+                            </Button>
+                            <Button
+                              type="button"
+                              onClick={() => {
+                                setEditingPermissionsKeyId(item.id);
+                                setEditingPermissions({
+                                  canReadFeatureFlags: item.canReadFeatureFlags,
+                                  canWriteFeatureFlags: item.canWriteFeatureFlags,
+                                  canReadEnvironments: item.canReadEnvironments,
+                                  canWriteEnvironments: item.canWriteEnvironments,
+                                  canReadProjects: item.canReadProjects,
+                                  canWriteProjects: item.canWriteProjects,
+                                });
+                                setPermissionsModalOpen(true);
+                              }}
                               className="rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-medium text-blue-700"
                             >
-                              Toggle Permission
+                              Edit permissions
                             </Button>
                             <Button
                               type="button"
@@ -236,14 +329,109 @@ export function ApiKeysPageClient({ userName, userEmail }: ApiKeysPageClientProp
                     placeholder="Name"
                     className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
                   />
-                  <label className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={canReadFeatureFlags}
-                      onChange={(event) => setCanReadFeatureFlags(event.target.checked)}
-                    />
-                    Read feature flags
-                  </label>
+                  <div className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 md:col-span-2">
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      Permissions
+                    </p>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={permissions.canReadFeatureFlags}
+                          onChange={(event) =>
+                            setPermissions((prev) =>
+                              updatePermissionsState(
+                                prev,
+                                "canReadFeatureFlags",
+                                event.target.checked,
+                              ),
+                            )
+                          }
+                        />
+                        Feature Flags: Read
+                      </label>
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={permissions.canWriteFeatureFlags}
+                          onChange={(event) =>
+                            setPermissions((prev) =>
+                              updatePermissionsState(
+                                prev,
+                                "canWriteFeatureFlags",
+                                event.target.checked,
+                              ),
+                            )
+                          }
+                        />
+                        Feature Flags: Write
+                      </label>
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={permissions.canReadEnvironments}
+                          onChange={(event) =>
+                            setPermissions((prev) =>
+                              updatePermissionsState(
+                                prev,
+                                "canReadEnvironments",
+                                event.target.checked,
+                              ),
+                            )
+                          }
+                        />
+                        Environments: Read
+                      </label>
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={permissions.canWriteEnvironments}
+                          onChange={(event) =>
+                            setPermissions((prev) =>
+                              updatePermissionsState(
+                                prev,
+                                "canWriteEnvironments",
+                                event.target.checked,
+                              ),
+                            )
+                          }
+                        />
+                        Environments: Write
+                      </label>
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={permissions.canReadProjects}
+                          onChange={(event) =>
+                            setPermissions((prev) =>
+                              updatePermissionsState(
+                                prev,
+                                "canReadProjects",
+                                event.target.checked,
+                              ),
+                            )
+                          }
+                        />
+                        Projects: Read
+                      </label>
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={permissions.canWriteProjects}
+                          onChange={(event) =>
+                            setPermissions((prev) =>
+                              updatePermissionsState(
+                                prev,
+                                "canWriteProjects",
+                                event.target.checked,
+                              ),
+                            )
+                          }
+                        />
+                        Projects: Write
+                      </label>
+                    </div>
+                  </div>
                   <label className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm text-slate-700">
                     <input
                       type="checkbox"
@@ -279,6 +467,154 @@ export function ApiKeysPageClient({ userName, userEmail }: ApiKeysPageClientProp
                     className="h-10 rounded-lg bg-[#465fff] px-4 text-sm font-medium text-white hover:bg-[#364ed9] disabled:opacity-70"
                   >
                     {createMutation.isPending ? "Creating..." : "Create API Key"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {permissionsModalOpen ? (
+            <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 p-4">
+              <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
+                <div className="flex items-center justify-between gap-3">
+                  <H2 className="text-lg">Edit API key permissions</H2>
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setPermissionsModalOpen(false);
+                      setEditingPermissionsKeyId(null);
+                    }}
+                    className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700"
+                  >
+                    Close
+                  </Button>
+                </div>
+
+                <div className="mt-4 rounded-lg border border-slate-300 px-3 py-3 text-sm text-slate-700">
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={editingPermissions.canReadFeatureFlags}
+                        onChange={(event) =>
+                          setEditingPermissions((prev) =>
+                            updatePermissionsState(
+                              prev,
+                              "canReadFeatureFlags",
+                              event.target.checked,
+                            ),
+                          )
+                        }
+                      />
+                      Feature Flags: Read
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={editingPermissions.canWriteFeatureFlags}
+                        onChange={(event) =>
+                          setEditingPermissions((prev) =>
+                            updatePermissionsState(
+                              prev,
+                              "canWriteFeatureFlags",
+                              event.target.checked,
+                            ),
+                          )
+                        }
+                      />
+                      Feature Flags: Write
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={editingPermissions.canReadEnvironments}
+                        onChange={(event) =>
+                          setEditingPermissions((prev) =>
+                            updatePermissionsState(
+                              prev,
+                              "canReadEnvironments",
+                              event.target.checked,
+                            ),
+                          )
+                        }
+                      />
+                      Environments: Read
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={editingPermissions.canWriteEnvironments}
+                        onChange={(event) =>
+                          setEditingPermissions((prev) =>
+                            updatePermissionsState(
+                              prev,
+                              "canWriteEnvironments",
+                              event.target.checked,
+                            ),
+                          )
+                        }
+                      />
+                      Environments: Write
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={editingPermissions.canReadProjects}
+                        onChange={(event) =>
+                          setEditingPermissions((prev) =>
+                            updatePermissionsState(
+                              prev,
+                              "canReadProjects",
+                              event.target.checked,
+                            ),
+                          )
+                        }
+                      />
+                      Projects: Read
+                    </label>
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={editingPermissions.canWriteProjects}
+                        onChange={(event) =>
+                          setEditingPermissions((prev) =>
+                            updatePermissionsState(
+                              prev,
+                              "canWriteProjects",
+                              event.target.checked,
+                            ),
+                          )
+                        }
+                      />
+                      Projects: Write
+                    </label>
+                  </div>
+                </div>
+
+                {updateMutation.error ? (
+                  <Alert variant="error" className="mt-3">
+                    {updateMutation.error.message}
+                  </Alert>
+                ) : null}
+
+                <div className="mt-4 flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      setPermissionsModalOpen(false);
+                      setEditingPermissionsKeyId(null);
+                    }}
+                    className="h-10 rounded-lg bg-slate-100 px-4 text-sm font-medium text-slate-700"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleSavePermissions}
+                    disabled={updateMutation.isPending || !editingPermissionsKeyId}
+                    className="h-10 rounded-lg bg-[#465fff] px-4 text-sm font-medium text-white hover:bg-[#364ed9] disabled:opacity-70"
+                  >
+                    {updateMutation.isPending ? "Saving..." : "Save permissions"}
                   </Button>
                 </div>
               </div>

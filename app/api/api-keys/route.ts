@@ -27,6 +27,11 @@ function toItem(apiKey: {
   name: string;
   keyPrefix: string;
   canReadFeatureFlags: boolean;
+  canWriteFeatureFlags: boolean;
+  canReadEnvironments: boolean;
+  canWriteEnvironments: boolean;
+  canReadProjects: boolean;
+  canWriteProjects: boolean;
   enabled: boolean;
   lastUsedAt: Date | null;
   createdAt: Date;
@@ -40,6 +45,11 @@ function toItem(apiKey: {
     name: apiKey.name,
     keyPrefix: apiKey.keyPrefix,
     canReadFeatureFlags: apiKey.canReadFeatureFlags,
+    canWriteFeatureFlags: apiKey.canWriteFeatureFlags,
+    canReadEnvironments: apiKey.canReadEnvironments,
+    canWriteEnvironments: apiKey.canWriteEnvironments,
+    canReadProjects: apiKey.canReadProjects,
+    canWriteProjects: apiKey.canWriteProjects,
     enabled: apiKey.enabled,
     lastUsedAt: apiKey.lastUsedAt ? apiKey.lastUsedAt.toISOString() : null,
     createdAt: apiKey.createdAt.toISOString(),
@@ -76,6 +86,11 @@ export async function GET() {
       name: true,
       keyPrefix: true,
       canReadFeatureFlags: true,
+      canWriteFeatureFlags: true,
+      canReadEnvironments: true,
+      canWriteEnvironments: true,
+      canReadProjects: true,
+      canWriteProjects: true,
       enabled: true,
       lastUsedAt: true,
       createdAt: true,
@@ -131,6 +146,14 @@ export async function POST(request: Request) {
       keyPrefix: rawApiKey.slice(0, 14),
       secretHash: hashApiKey(rawApiKey),
       canReadFeatureFlags: parsedInput.data.canReadFeatureFlags,
+      canWriteFeatureFlags:
+        parsedInput.data.canWriteFeatureFlags && parsedInput.data.canReadFeatureFlags,
+      canReadEnvironments: parsedInput.data.canReadEnvironments,
+      canWriteEnvironments:
+        parsedInput.data.canWriteEnvironments && parsedInput.data.canReadEnvironments,
+      canReadProjects: parsedInput.data.canReadProjects,
+      canWriteProjects:
+        parsedInput.data.canWriteProjects && parsedInput.data.canReadProjects,
       enabled: parsedInput.data.enabled,
     },
     select: {
@@ -145,6 +168,11 @@ export async function POST(request: Request) {
       name: true,
       keyPrefix: true,
       canReadFeatureFlags: true,
+      canWriteFeatureFlags: true,
+      canReadEnvironments: true,
+      canWriteEnvironments: true,
+      canReadProjects: true,
+      canWriteProjects: true,
       enabled: true,
       lastUsedAt: true,
       createdAt: true,

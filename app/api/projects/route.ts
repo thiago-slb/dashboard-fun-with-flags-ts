@@ -66,8 +66,8 @@ export async function GET(request: Request) {
       ? {
           tenant: {
             OR: [
-              { name: { contains: queryParam, mode: "insensitive" } },
-              { slug: { contains: queryParam, mode: "insensitive" } },
+              { name: { contains: queryParam } },
+              { slug: { contains: queryParam } },
             ],
           },
         }
