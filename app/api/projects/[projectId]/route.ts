@@ -1,21 +1,29 @@
+import { ActionLogType } from "@prisma/client";
 import { NextResponse } from "next/server";
 import {
   getActiveTenantIdCookie,
 } from "@/lib/auth/active-tenant";
+import { logAction } from "@/lib/audit/action-log";
+import { createRequestId, logApiEvent } from "@/lib/http/request-context";
+import { getUserProjectAccessInTenant, hasProjectAccess } from "@/lib/projects/access";
 import {
   projectErrorResponseSchema,
   updateProjectInputSchema,
   upsertProjectResponseSchema,
 } from "@/lib/projects/schemas";
+import { consumeRateLimit } from "@/lib/security/rate-limit";
 import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 
-function jsonError(status: number, code: string, message: string) {
+function jsonError(status: number, code: string, message: string, requestId: string) {
   const payload = projectErrorResponseSchema.parse({
     success: false,
     error: { code, message },
   });
-  return NextResponse.json(payload, { status });
+  return NextResponse.json(payload, {
+    status,
+    headers: { "x-request-id": requestId },
+  });
 }
 
 function toItem(item: {
@@ -37,35 +45,46 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
+  const requestId = createRequestId();
   const session = await getSession();
   if (!session) {
-    return jsonError(401, "UNAUTHORIZED", "You must be authenticated.");
+    return jsonError(401, "UNAUTHORIZED", "You must be authenticated.", requestId);
   }
 
   const { projectId } = await params;
+  const rateLimit = consumeRateLimit(`projects:update:${session.userId}`, 40, 60_000);
+  if (!rateLimit.allowed) {
+    return jsonError(
+      429,
+      "RATE_LIMITED",
+      `Too many requests. Retry in ${rateLimit.retryAfterSeconds}s.`,
+      requestId,
+    );
+  }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return jsonError(400, "INVALID_JSON", "Invalid request body.");
+    return jsonError(400, "INVALID_JSON", "Invalid request body.", requestId);
   }
 
   const parsedInput = updateProjectInputSchema.safeParse(body);
   if (!parsedInput.success) {
-    return jsonError(400, "VALIDATION_ERROR", "Invalid project data.");
+    return jsonError(400, "VALIDATION_ERROR", "Invalid project data.", requestId);
   }
 
-  const membership = await prisma.membership.findFirst({
-    where: {
-      userId: session.userId,
-      tenantId: projectId,
-    },
-    select: { id: true },
-  });
-
-  if (!membership) {
-    return jsonError(404, "NOT_FOUND", "Project not found.");
+  const access = await getUserProjectAccessInTenant(session.userId, projectId);
+  if (!access) {
+    return jsonError(404, "NOT_FOUND", "Project not found.", requestId);
+  }
+  if (!hasProjectAccess("write", access.roleNames, access.permissions)) {
+    return jsonError(
+      403,
+      "FORBIDDEN",
+      "You do not have permission to edit this project.",
+      requestId,
+    );
   }
 
   const updated = await prisma.tenant.update({
@@ -91,5 +110,27 @@ export async function PATCH(
     },
   });
 
-  return NextResponse.json(payload);
+  await logAction({
+    tenantId: projectId,
+    userId: session.userId,
+    actionType: ActionLogType.UPDATE,
+    resource: "project",
+    resourceId: projectId,
+    details: {
+      name: updated.name,
+    },
+  });
+
+  logApiEvent({
+    requestId,
+    route: "/api/projects/[projectId]",
+    userId: session.userId,
+    level: "info",
+    message: "Project updated.",
+    extra: { projectId },
+  });
+
+  return NextResponse.json(payload, {
+    headers: { "x-request-id": requestId },
+  });
 }

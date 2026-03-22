@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { MASTER_ROLE_NAME } from "@/lib/auth/constants";
 import { setActiveTenantCookie } from "@/lib/auth/active-tenant";
 import { existsUserWithMaxLevelRole } from "@/lib/auth/bootstrap";
+import { ensureTenantDefaultPermissions } from "@/lib/auth/permissions";
 import {
   signUpErrorResponseSchema,
   signUpInputSchema,
@@ -173,6 +174,8 @@ export async function POST(request: Request) {
         roleId: role.id,
       },
     });
+
+    await ensureTenantDefaultPermissions(tx, tenant.id, role.id);
 
     await tx.environment.create({
       data: {

@@ -1,21 +1,30 @@
+import { ActionLogType, MembershipStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { MASTER_ROLE_NAME } from "@/lib/auth/constants";
+import { ensureTenantDefaultPermissions } from "@/lib/auth/permissions";
 import { getActiveTenantIdCookie, setActiveTenantCookie } from "@/lib/auth/active-tenant";
+import { logAction } from "@/lib/audit/action-log";
+import { createRequestId, logApiEvent } from "@/lib/http/request-context";
+import { canUserCreateProjects } from "@/lib/projects/access";
 import {
   createProjectInputSchema,
   listProjectsResponseSchema,
   projectErrorResponseSchema,
   upsertProjectResponseSchema,
 } from "@/lib/projects/schemas";
+import { consumeRateLimit } from "@/lib/security/rate-limit";
 import { getSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 
-function jsonError(status: number, code: string, message: string) {
+function jsonError(status: number, code: string, message: string, requestId: string) {
   const payload = projectErrorResponseSchema.parse({
     success: false,
     error: { code, message },
   });
-  return NextResponse.json(payload, { status });
+  return NextResponse.json(payload, {
+    status,
+    headers: { "x-request-id": requestId },
+  });
 }
 
 function slugify(value: string) {
@@ -44,9 +53,20 @@ function projectToItem(
 }
 
 export async function GET(request: Request) {
+  const requestId = createRequestId();
   const session = await getSession();
   if (!session) {
-    return jsonError(401, "UNAUTHORIZED", "You must be authenticated.");
+    return jsonError(401, "UNAUTHORIZED", "You must be authenticated.", requestId);
+  }
+
+  const rateLimit = consumeRateLimit(`projects:get:${session.userId}`, 80, 60_000);
+  if (!rateLimit.allowed) {
+    return jsonError(
+      429,
+      "RATE_LIMITED",
+      `Too many requests. Retry in ${rateLimit.retryAfterSeconds}s.`,
+      requestId,
+    );
   }
 
   const url = new URL(request.url);
@@ -54,6 +74,9 @@ export async function GET(request: Request) {
   const cursorParam = url.searchParams.get("cursor");
   const queryParam = url.searchParams.get("q")?.trim() ?? "";
   const parsedLimit = limitParam ? Number.parseInt(limitParam, 10) : NaN;
+  if (limitParam && (!Number.isFinite(parsedLimit) || parsedLimit < 1)) {
+    return jsonError(400, "VALIDATION_ERROR", "Invalid limit.", requestId);
+  }
   const hasPagination = Number.isFinite(parsedLimit) && parsedLimit > 0;
   const limit = hasPagination ? Math.min(parsedLimit, 50) : null;
   const cursor = cursorParam?.trim() || null;
@@ -61,6 +84,7 @@ export async function GET(request: Request) {
 
   const membershipWhere = {
     userId: session.userId,
+    status: MembershipStatus.ACTIVE,
     ...(hasPagination && cursor ? { id: { gt: cursor } } : {}),
     ...(hasSearch
       ? {
@@ -120,25 +144,52 @@ export async function GET(request: Request) {
     nextCursor,
   });
 
-  return NextResponse.json(payload);
+  logApiEvent({
+    requestId,
+    route: "/api/projects",
+    userId: session.userId,
+    level: "info",
+    message: "Projects listed.",
+    extra: { itemCount: payload.items.length, hasSearch, hasPagination },
+  });
+
+  return NextResponse.json(payload, {
+    headers: { "x-request-id": requestId },
+  });
 }
 
 export async function POST(request: Request) {
+  const requestId = createRequestId();
   const session = await getSession();
   if (!session) {
-    return jsonError(401, "UNAUTHORIZED", "You must be authenticated.");
+    return jsonError(401, "UNAUTHORIZED", "You must be authenticated.", requestId);
+  }
+
+  const rateLimit = consumeRateLimit(`projects:create:${session.userId}`, 12, 60_000);
+  if (!rateLimit.allowed) {
+    return jsonError(
+      429,
+      "RATE_LIMITED",
+      `Too many requests. Retry in ${rateLimit.retryAfterSeconds}s.`,
+      requestId,
+    );
+  }
+
+  const canCreate = await canUserCreateProjects(session.userId);
+  if (!canCreate) {
+    return jsonError(403, "FORBIDDEN", "You do not have permission to create projects.", requestId);
   }
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return jsonError(400, "INVALID_JSON", "Invalid request body.");
+    return jsonError(400, "INVALID_JSON", "Invalid request body.", requestId);
   }
 
   const parsedInput = createProjectInputSchema.safeParse(body);
   if (!parsedInput.success) {
-    return jsonError(400, "VALIDATION_ERROR", "Invalid project data.");
+    return jsonError(400, "VALIDATION_ERROR", "Invalid project data.", requestId);
   }
 
   const randomSuffix = Math.random().toString(36).slice(2, 8);
@@ -185,6 +236,8 @@ export async function POST(request: Request) {
       },
     });
 
+    await ensureTenantDefaultPermissions(tx, tenant.id, role.id);
+
     await tx.environment.create({
       data: {
         tenantId: tenant.id,
@@ -192,6 +245,19 @@ export async function POST(request: Request) {
         name: "Desenvolvimento",
         description: "Ambiente de desenvolvimento padrão.",
         createdByUserId: session.userId,
+      },
+    });
+
+    await logAction({
+      tx,
+      tenantId: tenant.id,
+      userId: session.userId,
+      actionType: ActionLogType.CREATE,
+      resource: "project",
+      resourceId: tenant.id,
+      details: {
+        name: tenant.name,
+        slug: tenant.slug,
       },
     });
 
@@ -205,5 +271,17 @@ export async function POST(request: Request) {
     item: projectToItem(created, created.id),
   });
 
-  return NextResponse.json(payload, { status: 201 });
+  logApiEvent({
+    requestId,
+    route: "/api/projects",
+    userId: session.userId,
+    level: "info",
+    message: "Project created.",
+    extra: { projectId: created.id },
+  });
+
+  return NextResponse.json(payload, {
+    status: 201,
+    headers: { "x-request-id": requestId },
+  });
 }
