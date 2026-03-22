@@ -1,4 +1,4 @@
-import { ActionLogType } from "@prisma/client";
+import { ActionLogType, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import {
   getActiveTenantIdCookie,
@@ -87,19 +87,45 @@ export async function PATCH(
     );
   }
 
-  const updated = await prisma.tenant.update({
-    where: { id: projectId },
-    data: {
-      name: parsedInput.data.name,
-    },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      createdAt: true,
-      updatedAt: true,
-    },
-  });
+  let updated: {
+    id: string;
+    name: string;
+    slug: string;
+    createdAt: Date;
+    updatedAt: Date;
+  };
+  try {
+    updated = await prisma.tenant.update({
+      where: { id: projectId },
+      data: {
+        name: parsedInput.data.name,
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      return jsonError(404, "NOT_FOUND", "Project not found.", requestId);
+    }
+
+    logApiEvent({
+      requestId,
+      route: "/api/projects/[projectId]",
+      userId: session.userId,
+      level: "error",
+      message: "Could not update project.",
+      extra: { projectId },
+    });
+    return jsonError(500, "INTERNAL_ERROR", "Could not update project.", requestId);
+  }
 
   const activeTenantId = await getActiveTenantIdCookie();
   const payload = upsertProjectResponseSchema.parse({

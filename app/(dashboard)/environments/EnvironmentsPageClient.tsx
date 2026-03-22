@@ -1,21 +1,22 @@
 "use client";
 
-import { useState } from "react";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useI18n } from "@/components/i18n/I18nProvider";
 import { Header } from "@/components/dashboard/Header";
 import { SideMenu } from "@/components/dashboard/SideMenu";
 import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { FormField } from "@/components/ui/FormField";
 import { H1 } from "@/components/ui/H1";
 import { H2 } from "@/components/ui/H2";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Subtitle } from "@/components/ui/Subtitle";
 import { Table, Tbody, Th, Thead, Tr } from "@/components/ui/Table";
 import {
   useCreateEnvironmentMutation,
-  useDeleteEnvironmentMutation,
-  useEnvironmentsQuery,
+  useInfiniteEnvironmentsQuery,
   useUpdateEnvironmentMutation,
 } from "@/hooks/use-environments";
 
@@ -28,14 +29,13 @@ export function EnvironmentsPageClient({
   userName,
   userEmail,
 }: EnvironmentsPageClientProps) {
+  const { t } = useI18n();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [editingEnvironmentId, setEditingEnvironmentId] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<{
-    id: string;
-    name: string;
-  } | null>(null);
   const [newEnvironment, setNewEnvironment] = useState({
     key: "",
     name: "",
@@ -49,10 +49,45 @@ export function EnvironmentsPageClient({
     enabled: true,
   });
 
-  const environmentsQuery = useEnvironmentsQuery();
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const environmentsQuery = useInfiniteEnvironmentsQuery(debouncedSearch);
   const createMutation = useCreateEnvironmentMutation();
   const updateMutation = useUpdateEnvironmentMutation();
-  const deleteMutation = useDeleteEnvironmentMutation();
+  const hasNextPage = environmentsQuery.hasNextPage;
+  const isFetchingNextPage = environmentsQuery.isFetchingNextPage;
+  const fetchNextPage = environmentsQuery.fetchNextPage;
+  const environments = useMemo(
+    () => environmentsQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [environmentsQuery.data],
+  );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(searchInput.trim());
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry?.isIntersecting && hasNextPage && !isFetchingNextPage) {
+          void fetchNextPage();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [fetchNextPage, hasNextPage, isFetchingNextPage]);
 
   async function handleCreate() {
     await createMutation.mutateAsync(newEnvironment);
@@ -104,59 +139,134 @@ export function EnvironmentsPageClient({
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
             <div>
               <H1>
-                Environments
+                {t("environments.title")}
               </H1>
               <Subtitle>
-                Manage deployment targets like dev, staging and production.
+                {t("environments.subtitle")}
               </Subtitle>
             </div>
             <Button
               type="button"
               onClick={() => setCreateModalOpen(true)}
-              className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#465fff] px-4 text-sm font-medium text-white hover:bg-[#364ed9]"
+              leftIcon={
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  aria-hidden
+                >
+                  <path
+                    d="M12 5V19M5 12H19"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              }
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                aria-hidden
-              >
-                <path
-                  d="M12 5V19M5 12H19"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                />
-              </svg>
-              Create Environment
+              {t("environments.createButton")}
             </Button>
           </div>
 
           <Card className="mt-5">
-            <H2>Environments list</H2>
+            <H2>{t("environments.listTitle")}</H2>
+
+            <div className="mt-4">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  placeholder={t("projects.searchPlaceholder")}
+                  aria-label={t("projects.searchAria")}
+                  className="h-10 w-full rounded-lg border border-slate-300 bg-white px-3 pr-10 text-sm outline-none focus:border-[#465fff]"
+                />
+                {searchInput ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setSearchInput("")}
+                    aria-label={t("projects.clearSearch")}
+                    className="absolute right-1 top-1 h-8 w-8 rounded-md text-slate-500 hover:bg-slate-100"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                      aria-hidden
+                    >
+                      <path
+                        d="M18 6L6 18M6 6L18 18"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </Button>
+                ) : null}
+              </div>
+            </div>
 
             {environmentsQuery.isLoading ? (
-              <p className="mt-4 text-sm text-slate-500">Loading environments...</p>
+              <div className="mt-4 overflow-x-auto">
+                <Table className="w-full min-w-[760px] text-left text-sm">
+                  <Thead>
+                    <Tr className="text-xs uppercase tracking-wide text-slate-500">
+                      <Th className="pb-3">{t("environments.tableKey")}</Th>
+                      <Th className="pb-3">{t("environments.tableName")}</Th>
+                      <Th className="pb-3">{t("environments.tableDescription")}</Th>
+                      <Th className="pb-3">{t("environments.tableState")}</Th>
+                      <Th className="pb-3">{t("environments.tableActions")}</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody className="text-slate-700">
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <Tr key={`environments-skeleton-${index}`} className="border-t border-slate-100">
+                        <td className="py-3">
+                          <Skeleton className="h-4 w-28" />
+                        </td>
+                        <td className="py-3">
+                          <Skeleton className="h-4 w-36" />
+                        </td>
+                        <td className="py-3">
+                          <Skeleton className="h-4 w-56" />
+                        </td>
+                        <td className="py-3">
+                          <Skeleton className="h-5 w-24 rounded-full" />
+                        </td>
+                        <td className="py-3">
+                          <Skeleton className="h-8 w-20 rounded-lg" />
+                        </td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              </div>
             ) : environmentsQuery.error ? (
               <Alert variant="error" className="mt-4">
                 {(environmentsQuery.error as Error).message}
               </Alert>
+            ) : environments.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-500">{t("projects.empty")}</p>
             ) : (
               <div className="mt-4 overflow-x-auto">
                 <Table className="w-full min-w-[760px] text-left text-sm">
                   <Thead>
                     <Tr className="text-xs uppercase tracking-wide text-slate-500">
-                      <Th className="pb-3">Key</Th>
-                      <Th className="pb-3">Name</Th>
-                      <Th className="pb-3">Description</Th>
-                      <Th className="pb-3">State</Th>
-                      <Th className="pb-3">Actions</Th>
+                      <Th className="pb-3">{t("environments.tableKey")}</Th>
+                      <Th className="pb-3">{t("environments.tableName")}</Th>
+                      <Th className="pb-3">{t("environments.tableDescription")}</Th>
+                      <Th className="pb-3">{t("environments.tableState")}</Th>
+                      <Th className="pb-3">{t("environments.tableActions")}</Th>
                     </Tr>
                   </Thead>
                   <Tbody className="text-slate-700">
-                    {(environmentsQuery.data ?? []).map((item) => (
+                    {environments.map((item) => (
                       <Tr key={item.id} className="border-t border-slate-100">
                         <td className="py-3 font-medium text-slate-900">{item.key}</td>
                         <td className="py-3">{item.name}</td>
@@ -174,7 +284,9 @@ export function EnvironmentsPageClient({
                             size="none"
                           >
                             <Badge variant={item.enabled ? "success" : "neutral"} dot>
-                              {item.enabled ? "Enabled" : "Disabled"}
+                              {item.enabled
+                                ? t("environments.stateEnabled")
+                                : t("environments.stateDisabled")}
                             </Badge>
                           </Button>
                         </td>
@@ -192,53 +304,28 @@ export function EnvironmentsPageClient({
                                 });
                                 setEditModalOpen(true);
                               }}
-                              className="inline-flex items-center gap-1 rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-medium text-blue-700"
-                            >
-                              <svg
-                                width="14"
-                                height="14"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                xmlns="http://www.w3.org/2000/svg"
-                                aria-hidden
-                              >
-                                <path
-                                  d="M12 20H21M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z"
-                                  stroke="currentColor"
-                                  strokeWidth="1.7"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
-                              Edit
-                            </Button>
-                            <Button
-                              type="button"
-                              onClick={() =>
-                                setDeleteTarget({
-                                  id: item.id,
-                                  name: item.name,
-                                })
+                              variant="primary"
+                              size="sm"
+                              leftIcon={
+                                <svg
+                                  width="14"
+                                  height="14"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  aria-hidden
+                                >
+                                  <path
+                                    d="M12 20H21M16.5 3.5C17.3284 2.67157 18.6716 2.67157 19.5 3.5C20.3284 4.32843 20.3284 5.67157 19.5 6.5L7 19L3 20L4 16L16.5 3.5Z"
+                                    stroke="currentColor"
+                                    strokeWidth="1.7"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
                               }
-                              className="inline-flex items-center gap-1 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-medium text-red-700"
                             >
-                              <svg
-                                width="14"
-                                height="14"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                xmlns="http://www.w3.org/2000/svg"
-                                aria-hidden
-                              >
-                                <path
-                                  d="M3 6H5H21M8 6V4C8 3.44772 8.44772 3 9 3H15C15.5523 3 16 3.44772 16 4V6M19 6V20C19 20.5523 18.5523 21 18 21H6C5.44772 21 5 20.5523 5 20V6M10 11V17M14 11V17"
-                                  stroke="currentColor"
-                                  strokeWidth="1.7"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
-                              Delete
+                              {t("environments.edit")}
                             </Button>
                           </div>
                         </td>
@@ -246,6 +333,13 @@ export function EnvironmentsPageClient({
                     ))}
                   </Tbody>
                 </Table>
+                <div ref={loadMoreRef} className="h-1 w-full" aria-hidden />
+                {environmentsQuery.isFetchingNextPage ? (
+                  <div className="mt-3 flex items-center gap-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                ) : null}
               </div>
             )}
           </Card>
@@ -255,61 +349,85 @@ export function EnvironmentsPageClient({
               <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
                 <div className="flex items-center justify-between gap-3">
                   <H2 className="text-lg">
-                    Create environment
+                    {t("environments.createModalTitle")}
                   </H2>
                   <Button
                     type="button"
                     onClick={() => setCreateModalOpen(false)}
-                    className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700"
+                    variant="secondary"
+                    className="bg-gray-200 text-black hover:bg-gray-300"
                   >
-                    Close
+                    {t("environments.close")}
                   </Button>
                 </div>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <input
-                    type="text"
-                    value={newEnvironment.key}
-                    onChange={(event) =>
-                      setNewEnvironment((prev) => ({ ...prev, key: event.target.value }))
-                    }
-                    placeholder="key (ex: production)"
-                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
-                  />
-                  <input
-                    type="text"
-                    value={newEnvironment.name}
-                    onChange={(event) =>
-                      setNewEnvironment((prev) => ({ ...prev, name: event.target.value }))
-                    }
-                    placeholder="Name"
-                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
-                  />
-                  <input
-                    type="text"
-                    value={newEnvironment.description}
-                    onChange={(event) =>
-                      setNewEnvironment((prev) => ({
-                        ...prev,
-                        description: event.target.value,
-                      }))
-                    }
-                    placeholder="Description"
-                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
-                  />
-                  <label className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm text-slate-700">
+                  <FormField
+                    label={t("environments.keyLabel")}
+                    htmlFor="create-environment-key"
+                    className="mt-0"
+                  >
                     <input
-                      type="checkbox"
-                      checked={newEnvironment.enabled}
+                      id="create-environment-key"
+                      type="text"
+                      value={newEnvironment.key}
+                      onChange={(event) =>
+                        setNewEnvironment((prev) => ({ ...prev, key: event.target.value }))
+                      }
+                      placeholder={t("environments.keyPlaceholder")}
+                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
+                    />
+                  </FormField>
+                  <FormField
+                    label={t("environments.nameLabel")}
+                    htmlFor="create-environment-name"
+                    className="mt-0"
+                  >
+                    <input
+                      id="create-environment-name"
+                      type="text"
+                      value={newEnvironment.name}
+                      onChange={(event) =>
+                        setNewEnvironment((prev) => ({ ...prev, name: event.target.value }))
+                      }
+                      placeholder={t("environments.namePlaceholder")}
+                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
+                    />
+                  </FormField>
+                  <FormField
+                    label={t("environments.descriptionLabel")}
+                    htmlFor="create-environment-description"
+                    className="mt-0"
+                  >
+                    <input
+                      id="create-environment-description"
+                      type="text"
+                      value={newEnvironment.description}
                       onChange={(event) =>
                         setNewEnvironment((prev) => ({
                           ...prev,
-                          enabled: event.target.checked,
+                          description: event.target.value,
                         }))
                       }
+                      placeholder={t("environments.descriptionPlaceholder")}
+                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
                     />
-                    Enabled
-                  </label>
+                  </FormField>
+                  <FormField label={t("environments.enabledLabel")} className="mt-0">
+                    <select
+                      value={newEnvironment.enabled ? "enabled" : "disabled"}
+                      onChange={(event) =>
+                        setNewEnvironment((prev) => ({
+                          ...prev,
+                          enabled: event.target.value === "enabled",
+                        }))
+                      }
+                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
+                    >
+                      <option value="enabled">{t("environments.optionEnabled")}</option>
+                      <option value="disabled">{t("environments.optionDisabled")}</option>
+                    </select>
+                  </FormField>
                 </div>
 
                 {createMutation.error ? (
@@ -322,32 +440,35 @@ export function EnvironmentsPageClient({
                   <Button
                     type="button"
                     onClick={() => setCreateModalOpen(false)}
-                    className="h-10 rounded-lg bg-slate-100 px-4 text-sm font-medium text-slate-700"
+                    variant="secondary"
+                    className="bg-gray-200 text-black hover:bg-gray-300"
                   >
-                    Cancel
+                    {t("environments.cancel")}
                   </Button>
                   <Button
                     type="button"
                     onClick={handleCreate}
-                    disabled={createMutation.isPending}
-                    className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#465fff] px-4 text-sm font-medium text-white hover:bg-[#364ed9] disabled:opacity-70"
+                    loading={createMutation.isPending}
+                    loadingLabel={t("environments.creating")}
+                    leftIcon={
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                        aria-hidden
+                      >
+                        <path
+                          d="M12 5V19M5 12H19"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                    }
                   >
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                      aria-hidden
-                    >
-                      <path
-                        d="M12 5V19M5 12H19"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                    {createMutation.isPending ? "Creating..." : "Create"}
+                    {t("environments.create")}
                   </Button>
                 </div>
               </div>
@@ -358,63 +479,87 @@ export function EnvironmentsPageClient({
             <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/50 p-4">
               <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
                 <div className="flex items-center justify-between gap-3">
-                  <H2 className="text-lg">Edit environment</H2>
+                  <H2 className="text-lg">{t("environments.editModalTitle")}</H2>
                   <Button
                     type="button"
                     onClick={() => {
                       setEditModalOpen(false);
                       setEditingEnvironmentId(null);
                     }}
-                    className="rounded-lg bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700"
+                    variant="secondary"
+                    className="bg-gray-200 text-black hover:bg-gray-300"
                   >
-                    Close
+                    {t("environments.close")}
                   </Button>
                 </div>
 
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
-                  <input
-                    type="text"
-                    value={editingEnvironment.key}
-                    onChange={(event) =>
-                      setEditingEnvironment((prev) => ({ ...prev, key: event.target.value }))
-                    }
-                    placeholder="key (ex: production)"
-                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
-                  />
-                  <input
-                    type="text"
-                    value={editingEnvironment.name}
-                    onChange={(event) =>
-                      setEditingEnvironment((prev) => ({ ...prev, name: event.target.value }))
-                    }
-                    placeholder="Name"
-                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
-                  />
-                  <input
-                    type="text"
-                    value={editingEnvironment.description}
-                    onChange={(event) =>
-                      setEditingEnvironment((prev) => ({
-                        ...prev,
-                        description: event.target.value,
-                      }))
-                    }
-                    placeholder="Description"
-                    className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
-                  />
-                  <label className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm text-slate-700">
+                  <FormField
+                    label={t("environments.keyLabel")}
+                    htmlFor="edit-environment-key"
+                    className="mt-0"
+                  >
                     <input
-                      type="checkbox"
-                      checked={editingEnvironment.enabled}
+                      id="edit-environment-key"
+                      type="text"
+                      value={editingEnvironment.key}
+                      onChange={(event) =>
+                        setEditingEnvironment((prev) => ({ ...prev, key: event.target.value }))
+                      }
+                      placeholder={t("environments.keyPlaceholder")}
+                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
+                    />
+                  </FormField>
+                  <FormField
+                    label={t("environments.nameLabel")}
+                    htmlFor="edit-environment-name"
+                    className="mt-0"
+                  >
+                    <input
+                      id="edit-environment-name"
+                      type="text"
+                      value={editingEnvironment.name}
+                      onChange={(event) =>
+                        setEditingEnvironment((prev) => ({ ...prev, name: event.target.value }))
+                      }
+                      placeholder={t("environments.namePlaceholder")}
+                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
+                    />
+                  </FormField>
+                  <FormField
+                    label={t("environments.descriptionLabel")}
+                    htmlFor="edit-environment-description"
+                    className="mt-0"
+                  >
+                    <input
+                      id="edit-environment-description"
+                      type="text"
+                      value={editingEnvironment.description}
                       onChange={(event) =>
                         setEditingEnvironment((prev) => ({
                           ...prev,
-                          enabled: event.target.checked,
+                          description: event.target.value,
                         }))
                       }
+                      placeholder={t("environments.descriptionPlaceholder")}
+                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
                     />
-                    Enabled
-                  </label>
+                  </FormField>
+                  <FormField label={t("environments.enabledLabel")} className="mt-0">
+                    <select
+                      value={editingEnvironment.enabled ? "enabled" : "disabled"}
+                      onChange={(event) =>
+                        setEditingEnvironment((prev) => ({
+                          ...prev,
+                          enabled: event.target.value === "enabled",
+                        }))
+                      }
+                      className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
+                    >
+                      <option value="enabled">{t("environments.optionEnabled")}</option>
+                      <option value="disabled">{t("environments.optionDisabled")}</option>
+                    </select>
+                  </FormField>
                 </div>
 
                 {updateMutation.error ? (
@@ -430,54 +575,43 @@ export function EnvironmentsPageClient({
                       setEditModalOpen(false);
                       setEditingEnvironmentId(null);
                     }}
-                    className="h-10 rounded-lg bg-slate-100 px-4 text-sm font-medium text-slate-700"
+                    variant="secondary"
+                    className="bg-gray-200 text-black hover:bg-gray-300"
                   >
-                    Cancel
+                    {t("environments.cancel")}
                   </Button>
                   <Button
                     type="button"
                     onClick={handleUpdate}
-                    disabled={updateMutation.isPending || !editingEnvironmentId}
-                    className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#465fff] px-4 text-sm font-medium text-white hover:bg-[#364ed9] disabled:opacity-70"
+                    loading={updateMutation.isPending}
+                    loadingLabel={t("environments.saving")}
+                    disabled={!editingEnvironmentId}
+                    leftIcon={
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        xmlns="http://www.w3.org/2000/svg"
+                        aria-hidden
+                      >
+                        <path
+                          d="M20 6L9 17L4 12"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    }
                   >
-                    <svg
-                      width="16"
-                      height="16"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                      aria-hidden
-                    >
-                      <path
-                        d="M20 6L9 17L4 12"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    {updateMutation.isPending ? "Saving..." : "Save"}
+                    {t("environments.save")}
                   </Button>
                 </div>
               </div>
             </div>
           ) : null}
 
-          <ConfirmDialog
-            isOpen={Boolean(deleteTarget)}
-            title="Delete environment"
-            description={`Do you really want to delete "${deleteTarget?.name ?? ""}"? This action cannot be undone.`}
-            confirmLabel="Yes, delete"
-            isPending={deleteMutation.isPending}
-            onCancel={() => setDeleteTarget(null)}
-            onConfirm={async () => {
-              if (!deleteTarget) {
-                return;
-              }
-              await deleteMutation.mutateAsync(deleteTarget.id);
-              setDeleteTarget(null);
-            }}
-          />
         </main>
       </div>
     </div>

@@ -96,9 +96,13 @@ export function Button({
         </>
       ) : (
         <>
-          {leftIcon ? <span className="inline-flex shrink-0 items-center">{leftIcon}</span> : null}
+          {leftIcon ? (
+            <span className="inline-flex shrink-0 items-center pr-1">{leftIcon}</span>
+          ) : null}
           {children ? <span className="inline-flex items-center">{children}</span> : null}
-          {rightIcon ? <span className="inline-flex shrink-0 items-center">{rightIcon}</span> : null}
+          {rightIcon ? (
+            <span className="inline-flex shrink-0 items-center pl-1">{rightIcon}</span>
+          ) : null}
         </>
       )}
     </button>

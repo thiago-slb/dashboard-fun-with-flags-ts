@@ -5,7 +5,7 @@ import {
   useCallback,
   useContext,
   useMemo,
-  useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import {
@@ -24,6 +24,7 @@ type I18nContextValue = {
 };
 
 const I18nContext = createContext<I18nContextValue | null>(null);
+const LOCALE_CHANGE_EVENT = "fwf-locale-change";
 
 function resolveLocale(value: string | null): Locale {
   if (!value) {
@@ -50,17 +51,35 @@ function getByPath(source: unknown, path: string) {
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(() => {
-    if (typeof window === "undefined") {
-      return DEFAULT_LOCALE;
-    }
+  const locale = useSyncExternalStore(
+    (onStoreChange) => {
+      if (typeof window === "undefined") {
+        return () => undefined;
+      }
 
-    return resolveLocale(localStorage.getItem(LOCALE_STORAGE_KEY));
-  });
+      const callback = () => onStoreChange();
+      window.addEventListener("storage", callback);
+      window.addEventListener(LOCALE_CHANGE_EVENT, callback);
+      return () => {
+        window.removeEventListener("storage", callback);
+        window.removeEventListener(LOCALE_CHANGE_EVENT, callback);
+      };
+    },
+    () => {
+      if (typeof window === "undefined") {
+        return DEFAULT_LOCALE;
+      }
+      return resolveLocale(localStorage.getItem(LOCALE_STORAGE_KEY));
+    },
+    () => DEFAULT_LOCALE,
+  );
 
   const setLocale = useCallback((nextLocale: Locale) => {
-    setLocaleState(nextLocale);
+    if (typeof window === "undefined") {
+      return;
+    }
     localStorage.setItem(LOCALE_STORAGE_KEY, nextLocale);
+    window.dispatchEvent(new Event(LOCALE_CHANGE_EVENT));
   }, []);
 
   const t = useCallback(

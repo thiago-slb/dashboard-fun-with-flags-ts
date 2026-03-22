@@ -33,9 +33,10 @@ function getErrorMessage(payload: unknown, fallback: string) {
   return parsed.success ? parsed.data.error.message : fallback;
 }
 
-export function useProjectsQuery() {
+export function useProjectsQuery(enabled = true) {
   return useQuery({
     queryKey: PROJECTS_QUERY_KEY,
+    enabled,
     queryFn: async () => {
       const response = await fetch("/api/projects");
       const payload = await parseJson(response);
@@ -113,6 +114,7 @@ export function useCreateProjectMutation() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: PROJECTS_QUERY_KEY });
+      await queryClient.invalidateQueries({ queryKey: INFINITE_PROJECTS_QUERY_KEY });
     },
   });
 }
@@ -147,6 +149,7 @@ export function useUpdateProjectMutation() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: PROJECTS_QUERY_KEY });
+      await queryClient.invalidateQueries({ queryKey: INFINITE_PROJECTS_QUERY_KEY });
     },
   });
 }
@@ -176,6 +179,7 @@ export function useSetActiveProjectMutation() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: PROJECTS_QUERY_KEY });
+      await queryClient.invalidateQueries({ queryKey: INFINITE_PROJECTS_QUERY_KEY });
     },
   });
 }

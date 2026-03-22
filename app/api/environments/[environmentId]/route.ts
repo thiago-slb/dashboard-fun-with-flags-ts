@@ -1,20 +1,26 @@
 import { NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
+import { ActionLogType, Prisma } from "@prisma/client";
 import { getCurrentMembershipContext } from "@/lib/auth/current-membership";
+import { logAction } from "@/lib/audit/action-log";
+import { getUserEnvironmentAccessInTenant, hasEnvironmentAccess } from "@/lib/environments/access";
 import {
-  deleteEnvironmentResponseSchema,
   environmentErrorResponseSchema,
   updateEnvironmentInputSchema,
   upsertEnvironmentResponseSchema,
 } from "@/lib/environments/schemas";
+import { createRequestId, logApiEvent } from "@/lib/http/request-context";
 import { prisma } from "@/lib/prisma";
+import { consumeRateLimit } from "@/lib/security/rate-limit";
 
-function jsonError(status: number, code: string, message: string) {
+function jsonError(status: number, code: string, message: string, requestId: string) {
   const payload = environmentErrorResponseSchema.parse({
     success: false,
     error: { code, message },
   });
-  return NextResponse.json(payload, { status });
+  return NextResponse.json(payload, {
+    status,
+    headers: { "x-request-id": requestId },
+  });
 }
 
 function toItem(item: {
@@ -37,9 +43,33 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ environmentId: string }> },
 ) {
+  const requestId = createRequestId();
   const membership = await getCurrentMembershipContext();
   if (!membership) {
-    return jsonError(401, "UNAUTHORIZED", "You must be authenticated.");
+    return jsonError(401, "UNAUTHORIZED", "You must be authenticated.", requestId);
+  }
+
+  const rateLimit = consumeRateLimit(`environments:update:${membership.userId}`, 50, 60_000);
+  if (!rateLimit.allowed) {
+    return jsonError(
+      429,
+      "RATE_LIMITED",
+      `Too many requests. Retry in ${rateLimit.retryAfterSeconds}s.`,
+      requestId,
+    );
+  }
+
+  const access = await getUserEnvironmentAccessInTenant(
+    membership.userId,
+    membership.tenantId,
+  );
+  if (!access || !hasEnvironmentAccess("write", access.roleNames, access.permissions)) {
+    return jsonError(
+      403,
+      "FORBIDDEN",
+      "You do not have permission to edit environments.",
+      requestId,
+    );
   }
 
   const { environmentId } = await params;
@@ -48,12 +78,12 @@ export async function PATCH(
   try {
     body = await request.json();
   } catch {
-    return jsonError(400, "INVALID_JSON", "Invalid request body.");
+    return jsonError(400, "INVALID_JSON", "Invalid request body.", requestId);
   }
 
   const parsedInput = updateEnvironmentInputSchema.safeParse(body);
   if (!parsedInput.success) {
-    return jsonError(400, "VALIDATION_ERROR", "Invalid environment data.");
+    return jsonError(400, "VALIDATION_ERROR", "Invalid environment data.", requestId);
   }
 
   const existing = await prisma.environment.findFirst({
@@ -65,22 +95,40 @@ export async function PATCH(
   });
 
   if (!existing) {
-    return jsonError(404, "NOT_FOUND", "Environment not found.");
+    return jsonError(404, "NOT_FOUND", "Environment not found.", requestId);
   }
 
   try {
-    const updated = await prisma.environment.update({
-      where: { id: environmentId },
-      data: parsedInput.data,
-      select: {
-        id: true,
-        key: true,
-        name: true,
-        description: true,
-        enabled: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      const item = await tx.environment.update({
+        where: { id: environmentId },
+        data: parsedInput.data,
+        select: {
+          id: true,
+          key: true,
+          name: true,
+          description: true,
+          enabled: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      await logAction({
+        tx,
+        tenantId: membership.tenantId,
+        userId: membership.userId,
+        actionType: ActionLogType.UPDATE,
+        resource: "environment",
+        resourceId: environmentId,
+        details: {
+          key: item.key,
+          name: item.name,
+          enabled: item.enabled,
+        },
+      });
+
+      return item;
     });
 
     const payload = upsertEnvironmentResponseSchema.parse({
@@ -88,7 +136,18 @@ export async function PATCH(
       item: toItem(updated),
     });
 
-    return NextResponse.json(payload);
+    logApiEvent({
+      requestId,
+      route: "/api/environments/[environmentId]",
+      userId: membership.userId,
+      level: "info",
+      message: "Environment updated.",
+      extra: { environmentId },
+    });
+
+    return NextResponse.json(payload, {
+      headers: { "x-request-id": requestId },
+    });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -98,46 +157,18 @@ export async function PATCH(
         409,
         "ENVIRONMENT_KEY_ALREADY_EXISTS",
         "An environment with this key already exists.",
+        requestId,
       );
     }
 
-    return jsonError(500, "INTERNAL_ERROR", "Could not update environment.");
+    logApiEvent({
+      requestId,
+      route: "/api/environments/[environmentId]",
+      userId: membership.userId,
+      level: "error",
+      message: "Could not update environment.",
+      extra: { environmentId },
+    });
+    return jsonError(500, "INTERNAL_ERROR", "Could not update environment.", requestId);
   }
-}
-
-export async function DELETE(
-  _request: Request,
-  { params }: { params: Promise<{ environmentId: string }> },
-) {
-  const membership = await getCurrentMembershipContext();
-  if (!membership) {
-    return jsonError(401, "UNAUTHORIZED", "You must be authenticated.");
-  }
-
-  const { environmentId } = await params;
-
-  const existing = await prisma.environment.findFirst({
-    where: {
-      id: environmentId,
-      tenantId: membership.tenantId,
-    },
-    select: { id: true },
-  });
-
-  if (!existing) {
-    return jsonError(404, "NOT_FOUND", "Environment not found.");
-  }
-
-  await prisma.environment.delete({
-    where: {
-      id: environmentId,
-    },
-  });
-
-  const payload = deleteEnvironmentResponseSchema.parse({
-    success: true,
-    id: environmentId,
-  });
-
-  return NextResponse.json(payload);
 }

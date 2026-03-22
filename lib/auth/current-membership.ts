@@ -1,3 +1,4 @@
+import { MembershipStatus } from "@prisma/client";
 import { getSession } from "@/lib/auth/session";
 import { getActiveTenantIdCookie } from "@/lib/auth/active-tenant";
 import { prisma } from "@/lib/prisma";
@@ -16,6 +17,7 @@ export async function getCurrentMembershipContext() {
         where: {
           userId: session.userId,
           tenantId: activeTenantId,
+          status: MembershipStatus.ACTIVE,
         },
         select: {
           userId: true,
@@ -28,6 +30,7 @@ export async function getCurrentMembershipContext() {
     membership = await prisma.membership.findFirst({
       where: {
         userId: session.userId,
+        status: MembershipStatus.ACTIVE,
       },
       orderBy: {
         createdAt: "asc",

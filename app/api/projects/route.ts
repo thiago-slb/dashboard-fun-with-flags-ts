@@ -1,4 +1,4 @@
-import { ActionLogType, MembershipStatus } from "@prisma/client";
+import { ActionLogType, MembershipStatus, Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { MASTER_ROLE_NAME } from "@/lib/auth/constants";
 import { ensureTenantDefaultPermissions } from "@/lib/auth/permissions";
@@ -14,6 +14,11 @@ import {
 } from "@/lib/projects/schemas";
 import { consumeRateLimit } from "@/lib/security/rate-limit";
 import { getSession } from "@/lib/auth/session";
+import {
+  DEVELOPMENT_ENVIRONMENT_DESCRIPTION_BY_LOCALE,
+  DEVELOPMENT_ENVIRONMENT_NAME_BY_LOCALE,
+  resolveLocaleFromAcceptLanguage,
+} from "@/lib/environments/default-development";
 import { prisma } from "@/lib/prisma";
 
 function jsonError(status: number, code: string, message: string, requestId: string) {
@@ -36,6 +41,10 @@ function slugify(value: string) {
     .replace(/[\s_-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 40);
+}
+
+function isUniqueConstraintError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
 function projectToItem(
@@ -191,78 +200,119 @@ export async function POST(request: Request) {
   if (!parsedInput.success) {
     return jsonError(400, "VALIDATION_ERROR", "Invalid project data.", requestId);
   }
+  const locale = resolveLocaleFromAcceptLanguage(
+    request.headers.get("accept-language"),
+  );
 
-  const randomSuffix = Math.random().toString(36).slice(2, 8);
   const baseSlug = slugify(parsedInput.data.name) || "project";
-  const slug = `${baseSlug}-${randomSuffix}`;
 
-  const created = await prisma.$transaction(async (tx) => {
-    const tenant = await tx.tenant.create({
-      data: {
-        name: parsedInput.data.name,
-        slug,
-      },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
+  let created:
+    | { id: string; name: string; slug: string; createdAt: Date; updatedAt: Date }
+    | null = null;
+  let attempt = 0;
+  const maxAttempts = 3;
 
-    const role = await tx.role.create({
-      data: {
-        tenantId: tenant.id,
-        name: MASTER_ROLE_NAME,
-        description: "Master role with full access.",
-        isSystem: true,
-      },
-      select: { id: true },
-    });
+  while (!created && attempt < maxAttempts) {
+    const randomSuffix = Math.random().toString(36).slice(2, 8);
+    const slug = `${baseSlug}-${randomSuffix}`;
+    attempt += 1;
 
-    const membership = await tx.membership.create({
-      data: {
+    try {
+      created = await prisma.$transaction(async (tx) => {
+        const tenant = await tx.tenant.create({
+          data: {
+            name: parsedInput.data.name,
+            slug,
+          },
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        });
+
+        const role = await tx.role.create({
+          data: {
+            tenantId: tenant.id,
+            name: MASTER_ROLE_NAME,
+            description: "Master role with full access.",
+            isSystem: true,
+          },
+          select: { id: true },
+        });
+
+        const membership = await tx.membership.create({
+          data: {
+            userId: session.userId,
+            tenantId: tenant.id,
+          },
+          select: { id: true },
+        });
+
+        await tx.membershipRole.create({
+          data: {
+            membershipId: membership.id,
+            roleId: role.id,
+          },
+        });
+
+        await ensureTenantDefaultPermissions(tx, tenant.id, role.id);
+
+        await tx.environment.create({
+          data: {
+            tenantId: tenant.id,
+            key: "development",
+            name: DEVELOPMENT_ENVIRONMENT_NAME_BY_LOCALE[locale],
+            description: DEVELOPMENT_ENVIRONMENT_DESCRIPTION_BY_LOCALE[locale],
+            createdByUserId: session.userId,
+          },
+        });
+
+        await logAction({
+          tx,
+          tenantId: tenant.id,
+          userId: session.userId,
+          actionType: ActionLogType.CREATE,
+          resource: "project",
+          resourceId: tenant.id,
+          details: {
+            name: tenant.name,
+            slug: tenant.slug,
+          },
+        });
+
+        return tenant;
+      });
+    } catch (error) {
+      if (isUniqueConstraintError(error) && attempt < maxAttempts) {
+        continue;
+      }
+
+      if (isUniqueConstraintError(error)) {
+        return jsonError(
+          409,
+          "PROJECT_ALREADY_EXISTS",
+          "Could not generate a unique project slug. Please try again.",
+          requestId,
+        );
+      }
+
+      logApiEvent({
+        requestId,
+        route: "/api/projects",
         userId: session.userId,
-        tenantId: tenant.id,
-      },
-      select: { id: true },
-    });
+        level: "error",
+        message: "Could not create project.",
+      });
+      return jsonError(500, "INTERNAL_ERROR", "Could not create project.", requestId);
+    }
+  }
 
-    await tx.membershipRole.create({
-      data: {
-        membershipId: membership.id,
-        roleId: role.id,
-      },
-    });
-
-    await ensureTenantDefaultPermissions(tx, tenant.id, role.id);
-
-    await tx.environment.create({
-      data: {
-        tenantId: tenant.id,
-        key: "development",
-        name: "Desenvolvimento",
-        description: "Ambiente de desenvolvimento padrão.",
-        createdByUserId: session.userId,
-      },
-    });
-
-    await logAction({
-      tx,
-      tenantId: tenant.id,
-      userId: session.userId,
-      actionType: ActionLogType.CREATE,
-      resource: "project",
-      resourceId: tenant.id,
-      details: {
-        name: tenant.name,
-        slug: tenant.slug,
-      },
-    });
-
-    return tenant;
-  });
+  if (!created) {
+    return jsonError(500, "INTERNAL_ERROR", "Could not create project.", requestId);
+  }
 
   await setActiveTenantCookie(created.id);
 

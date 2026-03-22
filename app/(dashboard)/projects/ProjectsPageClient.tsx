@@ -9,6 +9,7 @@ import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { FormField } from "@/components/ui/FormField";
 import { H1 } from "@/components/ui/H1";
 import { H2 } from "@/components/ui/H2";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -367,18 +368,16 @@ export function ProjectsPageClient({ userName, userEmail }: ProjectsPageClientPr
                   </Button>
                 </div>
 
-                <div className="mt-4">
-                  <label className="text-xs uppercase tracking-wide text-slate-500">
-                    {t("projects.nameLabel")}
-                  </label>
+                <FormField label={t("projects.nameLabel")} htmlFor="create-project-name">
                   <input
+                    id="create-project-name"
                     type="text"
                     value={projectName}
                     onChange={(event) => setProjectName(event.target.value)}
                     placeholder={t("projects.namePlaceholder")}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
+                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
                   />
-                </div>
+                </FormField>
 
                 {createMutation.error ? (
                   <Alert variant="error" className="mt-3">
@@ -443,18 +442,16 @@ export function ProjectsPageClient({ userName, userEmail }: ProjectsPageClientPr
                   </Button>
                 </div>
 
-                <div className="mt-4">
-                  <label className="text-xs uppercase tracking-wide text-slate-500">
-                    {t("projects.nameLabel")}
-                  </label>
+                <FormField label={t("projects.nameLabel")} htmlFor="edit-project-name">
                   <input
+                    id="edit-project-name"
                     type="text"
                     value={editingProjectName}
                     onChange={(event) => setEditingProjectName(event.target.value)}
                     placeholder={t("projects.namePlaceholder")}
-                    className="mt-1 h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
+                    className="h-10 w-full rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-[#465fff]"
                   />
-                </div>
+                </FormField>
 
                 {updateMutation.error ? (
                   <Alert variant="error" className="mt-3">

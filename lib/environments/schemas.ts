@@ -13,6 +13,7 @@ export const environmentItemSchema = z.object({
 export const listEnvironmentsResponseSchema = z.object({
   success: z.literal(true),
   items: z.array(environmentItemSchema),
+  nextCursor: z.string().nullable().optional(),
 });
 
 export const createEnvironmentInputSchema = z.object({
@@ -61,11 +62,6 @@ export const upsertEnvironmentResponseSchema = z.object({
   item: environmentItemSchema,
 });
 
-export const deleteEnvironmentResponseSchema = z.object({
-  success: z.literal(true),
-  id: z.string(),
-});
-
 export const environmentErrorResponseSchema = z.object({
   success: z.literal(false),
   error: z.object({
@@ -77,3 +73,4 @@ export const environmentErrorResponseSchema = z.object({
 export type EnvironmentItem = z.infer<typeof environmentItemSchema>;
 export type CreateEnvironmentInput = z.infer<typeof createEnvironmentInputSchema>;
 export type UpdateEnvironmentInput = z.infer<typeof updateEnvironmentInputSchema>;
+export type ListEnvironmentsResponse = z.infer<typeof listEnvironmentsResponseSchema>;

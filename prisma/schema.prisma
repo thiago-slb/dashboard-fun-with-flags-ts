@@ -191,6 +191,7 @@ model Environment {
 
   @@unique([tenantId, key])
   @@index([tenantId, enabled])
+  @@index([tenantId, id])
 }
 
 model ActionLog {
