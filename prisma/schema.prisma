@@ -17,24 +17,40 @@ enum MembershipStatus {
   SUSPENDED
 }
 
+enum ActionLogType {
+  CREATE
+  UPDATE
+  DELETE
+}
+
 model User {
-  id          String       @id @default(cuid())
-  email       String       @unique
-  name        String?
-  memberships Membership[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id           String        @id @default(cuid())
+  email        String        @unique
+  name         String?
+  passwordHash String
+  memberships  Membership[]
+  createdFlags FeatureFlag[] @relation("FeatureFlagCreatedBy")
+  updatedFlags FeatureFlag[] @relation("FeatureFlagUpdatedBy")
+  apiKeys      ApiKey[]      @relation("ApiKeyCreatedBy")
+  environments Environment[] @relation("EnvironmentCreatedBy")
+  actionLogs   ActionLog[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 }
 
 model Tenant {
-  id          String       @id @default(cuid())
-  name        String
-  slug        String       @unique
-  memberships Membership[]
-  roles       Role[]
-  permissions Permission[]
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id           String        @id @default(cuid())
+  name         String
+  slug         String        @unique
+  memberships  Membership[]
+  roles        Role[]
+  permissions  Permission[]
+  featureFlags FeatureFlag[]
+  apiKeys      ApiKey[]
+  environments Environment[]
+  actionLogs   ActionLog[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 }
 
 model Membership {
@@ -105,4 +121,86 @@ model MembershipRole {
 
   @@unique([membershipId, roleId])
   @@index([roleId])
+}
+
+model FeatureFlag {
+  id              String   @id @default(cuid())
+  tenantId        String
+  environmentId   String
+  key             String
+  name            String
+  description     String?
+  enabled         Boolean  @default(false)
+  rolloutPercent  Int      @default(0)
+  createdByUserId String?
+  updatedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  environment Environment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  createdBy   User?       @relation("FeatureFlagCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  updatedBy   User?       @relation("FeatureFlagUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, environmentId, key])
+  @@index([tenantId, environmentId, enabled])
+}
+
+model ApiKey {
+  id                  String   @id @default(cuid())
+  tenantId            String
+  environmentId       String
+  name                String
+  keyPrefix           String
+  secretHash          String
+  canReadFeatureFlags Boolean  @default(true)
+  enabled             Boolean  @default(true)
+  lastUsedAt          DateTime?
+  createdByUserId     String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  environment Environment @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  createdBy   User?       @relation("ApiKeyCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, environmentId, enabled])
+}
+
+model Environment {
+  id              String   @id @default(cuid())
+  tenantId        String
+  key             String
+  name            String
+  description     String?
+  enabled         Boolean  @default(true)
+  createdByUserId String?
+  featureFlags    FeatureFlag[]
+  apiKeys         ApiKey[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User?  @relation("EnvironmentCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, key])
+  @@index([tenantId, enabled])
+}
+
+model ActionLog {
+  id         String        @id @default(cuid())
+  tenantId   String
+  userId     String?
+  actionType ActionLogType
+  resource   String
+  resourceId String?
+  details    Json?
+  createdAt  DateTime      @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, resource, createdAt])
+  @@index([userId, createdAt])
 }

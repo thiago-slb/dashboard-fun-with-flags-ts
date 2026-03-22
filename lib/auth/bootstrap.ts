@@ -1,12 +1,11 @@
 import { prisma } from "@/lib/prisma";
-
-const MAX_LEVEL_ROLE = "MAX_LEVEL_ROLE";
+import { MASTER_ROLE_NAME } from "@/lib/auth/constants";
 
 export async function existsUserWithMaxLevelRole() {
   const match = await prisma.membershipRole.findFirst({
     where: {
       role: {
-        name: MAX_LEVEL_ROLE,
+        name: MASTER_ROLE_NAME,
       },
     },
     select: {

@@ -1,10 +1,23 @@
 "use client";
 
+import Link from "next/link";
+
 type HeaderProps = {
   onToggleSidebar: () => void;
+  userName: string;
+  userEmail: string;
 };
 
-export function Header({ onToggleSidebar }: HeaderProps) {
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "U";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+
+export function Header({ onToggleSidebar, userName, userEmail }: HeaderProps) {
+  const initials = getInitials(userName);
+
   return (
     <header className="sticky top-0 z-40 flex w-full border-b border-gray-200 bg-white">
       <div className="flex w-full items-center justify-between gap-4 px-3 py-3 sm:px-5 lg:px-6 lg:py-4">
@@ -12,7 +25,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
           <button
             type="button"
             onClick={onToggleSidebar}
-            className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition hover:bg-gray-100 xl:h-11 xl:w-11"
+            className="flex h-10 w-10 items-center justify-center rounded-lg border border-gray-200 text-gray-500 transition hover:bg-gray-100 xl:hidden"
             aria-label="Toggle sidebar"
           >
             <svg
@@ -25,33 +38,6 @@ export function Header({ onToggleSidebar }: HeaderProps) {
               <path d="M2 5.25h16v1.5H2zm0 4h8v1.5H2zm0 4h16v1.5H2z" />
             </svg>
           </button>
-
-          <div className="relative hidden xl:block">
-            <input
-              type="text"
-              placeholder="Search or type command..."
-              className="h-11 w-[430px] rounded-lg border border-gray-200 bg-transparent py-2.5 pl-12 pr-14 text-sm text-gray-800 placeholder:text-gray-400 outline-none ring-[#465fff]/10 focus:border-[#465fff] focus:ring-4"
-            />
-            <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 20 20"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  fillRule="evenodd"
-                  clipRule="evenodd"
-                  d="M3.04 9.37a6.33 6.33 0 1 1 12.67 0 6.33 6.33 0 0 1-12.67 0ZM9.37 1.54a7.83 7.83 0 1 0 4.98 13.86l2.83 2.83a.75.75 0 1 0 1.06-1.06l-2.82-2.82a7.83 7.83 0 0 0-6.05-12.8Z"
-                  fill="currentColor"
-                />
-              </svg>
-            </span>
-            <span className="absolute right-2.5 top-1/2 inline-flex -translate-y-1/2 items-center gap-0.5 rounded-lg border border-gray-200 bg-gray-50 px-[7px] py-[4.5px] text-xs text-gray-500">
-              ⌘ K
-            </span>
-          </div>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
@@ -74,22 +60,22 @@ export function Header({ onToggleSidebar }: HeaderProps) {
             </svg>
           </button>
 
-          <button
-            type="button"
+          <Link
+            href="/profile"
             className="flex items-center gap-3 rounded-full border border-gray-200 bg-white p-1 pr-3 transition hover:bg-gray-100"
           >
             <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gray-900 text-xs font-semibold text-white">
-              MC
+              {initials}
             </span>
             <span className="hidden text-left sm:block">
               <span className="block text-sm font-medium text-gray-800">
-                Musharof
+                {userName}
               </span>
               <span className="block text-xs text-gray-500">
-                [email protected]
+                {userEmail}
               </span>
             </span>
-          </button>
+          </Link>
         </div>
       </div>
     </header>

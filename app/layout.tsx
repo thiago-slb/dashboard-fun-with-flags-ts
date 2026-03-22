@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { I18nProvider } from "@/components/i18n/I18nProvider";
+import { AppProviders } from "@/components/providers/AppProviders";
 import { existsUserWithMaxLevelRole } from "@/lib/auth/bootstrap";
 import { getSession } from "@/lib/auth/session";
 import "./globals.css";
@@ -53,7 +53,7 @@ export default async function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <I18nProvider>{children}</I18nProvider>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );
